@@ -141,9 +141,18 @@ export class ClientTransport implements Transport {
         this.welcomeEvents = message.events;
         this.startHeartbeat();
         this.transition({ type: 'welcomed' });
-        this.pendingWelcome?.(message.gameId, message.events);
-        this.pendingWelcome = null;
-        this.pendingWelcomeReject = null;
+        if (this.pendingWelcome) {
+          // First connect: the caller (connectionStore) is awaiting connect()'s
+          // promise and will seed gameStore.createReplicaGame from these events.
+          this.pendingWelcome(message.gameId, message.events);
+          this.pendingWelcome = null;
+          this.pendingWelcomeReject = null;
+        } else {
+          // A reconnect's catch-up burst — gameStore is already seeded and
+          // subscribed, so replay these through the normal per-event channel
+          // (applyEvent's own intentId/seq checks make this dedup-safe).
+          for (const event of message.events) this.eventListeners.forEach(l => l(event));
+        }
         break;
       case 'event':
         this.eventListeners.forEach(l => l(message.event));
