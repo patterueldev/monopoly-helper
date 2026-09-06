@@ -448,6 +448,17 @@ without help.
    whole game (that's still M5) — entries are still typed in at settlement
    time, just as a list instead of one number.
 
+6. **Per-device player profile, not a shared roster.** Because each person
+   has their own device (Section 11's LAN model, not single-device banker
+   mode), there's no host-side "remembered players" list to retain across
+   games — that idea only made sense under the single-device version, which
+   we are not building. Instead: each device persists its own `{ name,
+   color }` locally (separate storage key from any game log, survives across
+   games same as an app setting), and pre-fills it when that device joins a
+   session, so a returning player only confirms rather than retypes. The
+   host still creates the actual `Account` records from whatever joiners
+   send at join time — nothing is cached or reused across devices.
+
 ### Explicitly still not in MVP
 
 Full property/mortgage tracking during play (M5), auction flow, card decks,
