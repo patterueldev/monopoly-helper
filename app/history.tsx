@@ -1,3 +1,12 @@
-import {SafeAreaView,Text,View,StyleSheet} from 'react-native';import {useGameStore} from '../src/store/gameStore';import {colors} from '../src/theme';
-export default function History(){const s=useGameStore(x=>x.state);return <SafeAreaView style={st.safe}><View style={st.wrap}><Text style={st.heading}>History</Text>{s.events.slice().reverse().map(e=><View key={`${e.seq}-${e.intentId}`} style={st.row}><Text style={st.seq}>#{e.seq}</Text><Text style={st.event}>{e.type==='transfer'?`${s.accounts[e.payload.from]?.name||e.payload.from} → ${s.accounts[e.payload.to]?.name||e.payload.to}  ${s.config?.currencySymbol}${e.payload.amount.toLocaleString()}`:e.type}</Text></View>)}</View></SafeAreaView>}
-const st=StyleSheet.create({safe:{flex:1,backgroundColor:colors.cream},wrap:{padding:20},heading:{fontSize:34,fontWeight:'900',color:colors.green,marginBottom:12},row:{flexDirection:'row',padding:14,backgroundColor:'#fff',marginVertical:3,borderRadius:8},seq:{color:colors.muted,width:42},event:{fontSize:16}});
+import { router } from 'expo-router';
+import { Pressable, SafeAreaView, Text, View } from 'react-native';
+import { useGameStore } from '../src/store/gameStore';
+import { history, latestUndo } from '../src/ledger/selectors';
+import { colors } from '../src/theme';
+
+export default function History() {
+  const state = useGameStore((x) => x.state);
+  const dispatch = useGameStore((x) => x.dispatch);
+  const undo = latestUndo(state);
+  return <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}><View style={{ padding: 20, gap: 8 }}><Text style={{ fontSize: 34, fontWeight: '900', color: colors.green }}>History</Text>{undo && <Pressable onPress={() => { const result = dispatch({ type: 'transfer.reversed', actorId: 'bank', intentId: `undo-${Date.now()}-${undo.seq}`, payload: { targetSeq: undo.seq } }); if (result.ok) router.replace('/history'); }} style={{ backgroundColor: colors.green, padding: 14, borderRadius: 10, alignItems: 'center' }}><Text style={{ color: colors.white, fontWeight: '800' }}>Undo latest payment</Text></Pressable>}{history(state).map((entry: any) => { const event = entry.event; const label = event.type === 'transfer' ? `${state.accounts[event.payload.from]?.name ?? event.payload.from} → ${state.accounts[event.payload.to]?.name ?? event.payload.to}  ${state.config?.currencySymbol ?? '$'}${event.payload.amount.toLocaleString()}` : event.type; return <View key={`${event.seq}-${event.intentId}`} style={{ flexDirection: 'row', padding: 14, backgroundColor: entry.reversed ? '#eee' : colors.white, borderRadius: 8 }}><Text style={{ color: colors.muted, width: 42 }}>#{event.seq}</Text><Text style={{ textDecorationLine: entry.reversed ? 'line-through' : 'none' }}>{label}</Text></View>; })}</View></SafeAreaView>;
+}
