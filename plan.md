@@ -4,7 +4,9 @@ A React Native companion app for a physical Monopoly board. It replaces the pape
 money and the banker's mental arithmetic. The board, the dice, and the rules stay
 on the table.
 
-Status: planning. MVP scope is the money system only.
+Status: M1 and M2 (ledger core, single-device app) are built. MVP scope has
+since been revised — see [Section 11](#11-mvp-v2--family-lan-scope-2026-09-06),
+which supersedes the milestone ordering in Section 7 where the two disagree.
 
 ---
 
@@ -390,3 +392,118 @@ The pure reducer makes this cheap, so there is no excuse for skipping it.
 - **Never block on correctness.** Negative balances, weird amounts, and payments
   in the wrong direction are all allowed. Undo is the safety net, not
   validation.
+
+---
+
+## 11. MVP v2 — family LAN scope (2026-09-06)
+
+The real target got clearer after building M1/M2. This section states it and
+supersedes Section 7's milestone ordering wherever they conflict — Section 7's
+content (event catalog, reducer rules) is still accurate, just not the order.
+
+### Who and why
+
+Built for the author and their sisters to use at the table when playing
+physical Monopoly. One person starts a game; everyone else joins from their
+own phone. Smooth enough that a non-technical player can use it mid-game
+without help.
+
+### What's actually in the MVP now
+
+1. **LAN multiplayer is MVP, not M4.** Wi-Fi only for v1 — Bluetooth is
+   explicitly out of scope for now (open decision, revisit later if Wi-Fi
+   proves unreliable at the table). One host device is the single writer per
+   Section 2; joiners send intents over the LAN, the host validates, assigns
+   `seq`, and broadcasts the event. This is exactly the shape `Transport.ts`
+   already reserves — M4 planning starts from there, not from scratch.
+
+2. **Turn tracking, advisory only.** The app tracks whose turn it is and
+   offers an "end turn" action, but per the "never block on correctness"
+   principle it does **not** enforce it — any player can pay, receive, or
+   act out of turn if the table agrees. Turn state is a derived/event-sourced
+   value like everything else (e.g. a `turn.advanced { toAccountId }` event),
+   not a gate on other intents.
+
+3. **Rent and jail are just labeled transfers and a status flag, not new
+   mechanics.** Getting paid rent is the current-turn player initiating a
+   `transfer` with `reason: { kind: 'rent' }` from another player to
+   themselves — no new event type needed, matches the existing catalog.
+   Jail is a display-only boolean on the player (e.g. `player.jailed` /
+   `player.released` events) that changes nothing about what actions are
+   allowed — same non-enforcement principle as turn order.
+
+4. **Dice: descoped entirely for MVP.** No dice UI, no dice event. The
+   original three-way design (physical roll / skip / disabled) is deferred
+   post-MVP; don't build scaffolding for it now — adding it later is cheap
+   (one optional screen, no ledger changes) and speculative scaffolding
+   would violate YAGNI for a feature that might not survive contact with
+   actual games.
+
+5. **Settlement's Itemized mode is pulled into MVP**, replacing the single
+   valuation text box in `app/settlement.tsx` with a per-player, per-line
+   entry (property, houses × cost, hotels × cost, minus mortgaged amounts)
+   that sums automatically. This is Section 5.6's "Itemized" mode, already
+   specced — it just moves from "M3, either mode" to "MVP, itemized
+   specifically." It does **not** require tracking properties through the
+   whole game (that's still M5) — entries are still typed in at settlement
+   time, just as a list instead of one number.
+
+### Explicitly still not in MVP
+
+Full property/mortgage tracking during play (M5), auction flow, card decks,
+board/position awareness, Bluetooth transport, and built dice UI. These stay
+exactly where Section 7 already puts them.
+
+---
+
+## 12. Architecture standards
+
+Added retroactively after M1/M2; applies going forward and to any refactor of
+existing code.
+
+### MVVM mapping
+
+| Layer | Folder | Rule |
+|---|---|---|
+| Model | `src/ledger/` | Pure data + transitions. No React, no I/O — already enforced by convention (Section 2); should be enforced by tooling too (see Linting below). |
+| ViewModel | `src/store/` (+ a new `src/viewmodels/` or per-screen hooks) | Owns state shape and behavior a screen needs, exposes plain data and callbacks. Screens should not call `dispatch`, `activePlayers`, or `balance` directly inline — that logic belongs in a hook per screen (`useSettlementViewModel`, etc.), which is currently not the case (see below). |
+| View | `app/*.tsx`, `src/components/` (new) | Renders props/state from its viewmodel hook. No business logic, no direct store access. |
+
+**Current gap:** every screen today (`app/settlement.tsx`, `app/pay.tsx`, etc.)
+reads the store and computes derived values inline, and is written as a single
+dense expression rather than idiomatic JSX. That's a MVVM violation as much as
+a style one — untangling it means extracting a `use<Screen>ViewModel()` hook
+per screen and reformatting the JSX normally. Worth doing screen-by-screen
+rather than as one large refactor.
+
+### SOLID, applied to this codebase specifically
+
+- **SRP** — already true in `src/ledger/` (types/reducer/selectors/intents are
+  separate). Not yet true in `app/*.tsx`, which mix data-fetching, derivation,
+  and rendering in one file (see MVVM gap above).
+- **OCP** — the `TransferReason` tagged union and `KeyValueStorage` interface
+  are the model: new reasons/storage backends extend without modifying
+  existing callers. Keep new features (rent, jail, turn) shaped this way —
+  new event types and reason variants, not new special-cased fields.
+- **LSP/ISP** — `KeyValueStorage` with `MemoryStorage`/`productionStorage` is
+  a good narrow interface; do the same for the LAN transport
+  (`Transport.ts`) rather than one fat interface mixing host- and
+  client-only methods.
+- **DIP** — `gameStore.ts` already depends on the `KeyValueStorage`
+  abstraction, not concrete MMKV. When LAN multiplayer lands, the store
+  should depend on the `Transport` interface the same way, not on a concrete
+  socket implementation.
+
+### Linting and file size
+
+Target: no file over 500 lines, enforced by `eslint`'s `max-lines` rule
+(added to `eslint.config.js`). Note this is necessary but not sufficient —
+the current one-line-per-file style in `app/*.tsx` means files are short in
+line count while still doing too much per line. The line cap should be paired
+with normal multi-line formatting (Prettier) so it actually reflects
+complexity, and ideally a `max-lines-per-function` rule once screens are
+split into viewmodel hooks + presentational JSX.
+
+A `no-restricted-imports`-style boundary (ledger/ must not import from
+store/, transport/, or screens/) would make Section 2's module-boundary rule
+machine-checked instead of just documented.
