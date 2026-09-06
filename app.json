@@ -8,11 +8,12 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pat.monopolybanker",
+      "bundleIdentifier": "dev.patteruel.monopolybanker",
       "appleTeamId": "2ZL598ZSDC"
     },
     "android": {
-      "package": "com.pat.monopolybanker"
+      "package": "dev.patteruel.monopolybanker",
+      "googleServicesFile": "./google-services.json"
     },
     "plugins": [
       "expo-router"
