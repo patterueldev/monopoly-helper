@@ -45,7 +45,7 @@ describe('game store role branching', () => {
     store.getState().createGame(DEFAULT_CONFIG, accounts);
     const broadcast: GameEvent[] = [];
     const { transport } = fakeTransport(() => { throw new Error('host never calls transport.submit for its own local dispatch'); });
-    store.getState().attachTransport(transport, 'host', event => broadcast.push(event));
+    store.getState().attachTransport(transport, 'host', { onHostEvent: event => broadcast.push(event) });
     expect(store.getState().role).toBe('host');
     const result = store.getState().dispatch(makeEvent('transfer', { from: 'a', to: 'b', amount: 50, reason: { kind: 'other' } }, 'a', 1, 'p1'));
     expect(result.ok).toBe(true);
@@ -59,7 +59,7 @@ describe('game store role branching', () => {
     store.getState().createGame(DEFAULT_CONFIG, accounts);
     const broadcast: GameEvent[] = [];
     const { transport } = fakeTransport(() => { throw new Error('unused'); });
-    store.getState().attachTransport(transport, 'host', event => broadcast.push(event));
+    store.getState().attachTransport(transport, 'host', { onHostEvent: event => broadcast.push(event) });
     store.getState().dispatch(makeEvent('transfer', { from: 'a', to: 'b', amount: 50, reason: { kind: 'other' } }, 'a', 1, 'dup'));
     const second = store.getState().dispatch(makeEvent('transfer', { from: 'a', to: 'b', amount: 999, reason: { kind: 'other' } }, 'a', 1, 'dup'));
     expect(second.ok).toBe(true);
@@ -111,6 +111,17 @@ describe('game store role branching', () => {
     push(makeEvent('transfer', { from: 'b', to: 'a', amount: 25, reason: { kind: 'other' } }, 'b', 1, 'from-other-client'));
     expect(store.getState().state.balances.a).toBe(1525);
     expect(store.getState().state.balances.b).toBe(1475);
+  });
+
+  it('client role fails fast when attached but not currently connected (e.g. reconnecting)', () => {
+    const storage = new MemoryStorage(); const store = createGameStore(storage);
+    const startEvent = makeEvent('game.started', { config: DEFAULT_CONFIG, accounts }, 'bank', 0, 'start');
+    store.getState().createReplicaGame('replica-game', [startEvent]);
+    const { transport } = fakeTransport(() => { throw new Error('must not be called while disconnected'); });
+    store.getState().attachTransport(transport, 'client', { isConnected: () => false });
+    const result = store.getState().dispatch(makeEvent('transfer', { from: 'a', to: 'b', amount: 50, reason: { kind: 'other' } }, 'a', 999, 'c2'));
+    expect(result).toEqual({ ok: false, error: 'Not connected to host' });
+    expect(store.getState().state.balances.a).toBe(1500); // untouched
   });
 
   it('detachTransport closes the transport and resets to single role', () => {

@@ -41,7 +41,7 @@ interface Store {
    * them into local state (never assigns seq). 'host' keeps dispatching locally exactly
    * as 'single' does, but calls `onHostEvent` for every newly-appended (non-duplicate)
    * event so the caller (HostTransport) can broadcast it to connected peers. */
-  attachTransport: (transport: Transport, role: 'host' | 'client', onHostEvent?: (event: GameEvent) => void) => void;
+  attachTransport: (transport: Transport, role: 'host' | 'client', options?: { onHostEvent?: (event: GameEvent) => void; isConnected?: () => boolean }) => void;
   detachTransport: () => void;
 }
 
@@ -51,6 +51,7 @@ const defaultStorage = (): KeyValueStorage => process.env.NODE_ENV === 'test' ? 
 export const createGameStore = (storage: KeyValueStorage = defaultStorage()) => {
   let unsubscribeTransport: (() => void) | undefined;
   let onHostEvent: ((event: GameEvent) => void) | undefined;
+  let isConnected: (() => boolean) | undefined;
 
   return create<Store>((set, get) => ({
     gameId: lastGameId(storage) ?? null,
@@ -64,7 +65,7 @@ export const createGameStore = (storage: KeyValueStorage = defaultStorage()) => 
       if (!current.gameId) return { ok: false, error: 'No game selected' };
 
       if (current.role === 'client') {
-        if (!current.transport) return { ok: false, error: 'Not connected to host' };
+        if (!current.transport || (isConnected && !isConnected())) return { ok: false, error: 'Not connected to host' };
         // Fire-and-forget: the resulting event (or a host `reject`) arrives back
         // through the subscribed broadcast channel set up in attachTransport, per
         // plan.md Section 2 — clients never apply local/optimistic state, so this
@@ -137,10 +138,11 @@ export const createGameStore = (storage: KeyValueStorage = defaultStorage()) => 
     saveDraft: value => { const id = get().gameId; if (id) saveDraft(storage, id, value); },
     loadDraft: <T,>() => { const id = get().gameId; return id ? loadDraft<T>(storage, id) : null; },
 
-    attachTransport: (transport, role, hostEventCallback) => {
+    attachTransport: (transport, role, options) => {
       unsubscribeTransport?.();
       unsubscribeTransport = undefined;
-      onHostEvent = role === 'host' ? hostEventCallback : undefined;
+      onHostEvent = role === 'host' ? options?.onHostEvent : undefined;
+      isConnected = role === 'client' ? options?.isConnected : undefined;
       if (role === 'client') {
         unsubscribeTransport = transport.subscribe(event => {
           const current = get();
@@ -158,6 +160,7 @@ export const createGameStore = (storage: KeyValueStorage = defaultStorage()) => 
       unsubscribeTransport?.();
       unsubscribeTransport = undefined;
       onHostEvent = undefined;
+      isConnected = undefined;
       get().transport?.close();
       set({ role: 'single', transport: null });
     },
