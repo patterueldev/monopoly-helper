@@ -1,0 +1,13 @@
+import {GameEvent,GameState,Account,DEFAULT_CONFIG} from './types';
+export const initialState=():GameState=>({started:false,ended:false,accounts:{},balances:{},eliminated:new Set(),reversed:new Set(),events:[],invalid:false});
+const change=(s:GameState,id:string,n:number)=>{const a=s.accounts[id];if(!a||a.unlimited)return;if(!Number.isSafeInteger((s.balances[id]||0)+n))s.invalid=true;else s.balances[id]=(s.balances[id]||0)+n};
+export function applyEvent(prev:GameState,e:GameEvent):GameState { const s={...prev,accounts:{...prev.accounts},balances:{...prev.balances},eliminated:new Set(prev.eliminated),reversed:new Set(prev.reversed),events:[...prev.events]};
+ if(s.events.some(x=>x.intentId===e.intentId)){return prev} s.events.push(e);
+ switch(e.type){case'game.started': if(e.seq!==0||s.started)return {...s,invalid:true}; s.started=true;s.config=e.payload.config||DEFAULT_CONFIG;e.payload.accounts.forEach(a=>{s.accounts[a.id]=a;if(!a.unlimited)s.balances[a.id]=a.kind==='player'?s.config!.startingCash:0});break;
+ case'player.joined':if(!s.started||s.ended||s.accounts[e.payload.account.id]){s.invalid=true;break}s.accounts[e.payload.account.id]=e.payload.account;s.balances[e.payload.account.id]=e.payload.account.kind==='player'?s.config!.startingCash:0;break;
+ case'player.renamed':{const a=s.accounts[e.payload.accountId];if(!a){s.invalid=true;break}s.accounts[a.id]={...a,name:e.payload.name,color:e.payload.color};break}
+ case'transfer':if(s.ended||e.payload.amount<=0||!Number.isSafeInteger(e.payload.amount)||e.payload.from===e.payload.to||!s.accounts[e.payload.from]||!s.accounts[e.payload.to]||s.eliminated.has(e.payload.from)){s.invalid=true;break}change(s,e.payload.from,-e.payload.amount);change(s,e.payload.to,e.payload.amount);if(s.accounts[e.payload.from]?.kind==='player')s.lastPayer=e.payload.from;break;
+ case'transfer.reversed':{const target=s.events.find(x=>x.seq===e.payload.targetSeq);const max=[...s.events].reverse().find(x=>x.type==='transfer'&&!s.reversed.has(x.seq));if(!target||target.type!=='transfer'||target.seq!==max?.seq){s.invalid=true;break}s.reversed.add(target.seq);change(s,target.payload.from,target.payload.amount);change(s,target.payload.to,-target.payload.amount);break}
+ case'player.eliminated':{const id=e.payload.accountId;if(!s.accounts[id]||s.eliminated.has(id)||s.ended){s.invalid=true;break}const bal=s.balances[id]||0;if(bal>0)change(s,id,-bal),change(s,e.payload.creditorId||'bank',bal);else if(bal<0)change(s,id,-bal);s.eliminated.add(id);s.balances[id]=0;break}
+ case'game.ended':if(s.ended||!s.started){s.invalid=true;break}s.ended=true;s.tally=e.payload.tally;break;} return s; }
+export const fold=(events:GameEvent[])=>events.reduce(applyEvent,initialState());

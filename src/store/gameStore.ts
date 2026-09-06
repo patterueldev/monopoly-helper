@@ -1,0 +1,3 @@
+import {create} from 'zustand';import {GameEvent,GameState} from '../ledger/types';import {applyEvent,initialState} from '../ledger/reducer';import {saveGame} from './persistence';
+interface Store {gameId:string;state:GameState;dispatch:(e:GameEvent)=>boolean;replace:(events:GameEvent[])=>void}
+export const useGameStore=create<Store>((set,get)=>({gameId:'current',state:initialState(),dispatch:e=>{const next=applyEvent(get().state,e);if(next.invalid)return false;try{saveGame(get().gameId,[...next.events]);set({state:next});return true}catch{return false}},replace:events=>set({state:events.reduce(applyEvent,initialState())})}));
