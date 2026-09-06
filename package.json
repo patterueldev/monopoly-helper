@@ -23,6 +23,7 @@
     "expo-font": "~57.0.3",
     "expo-keep-awake": "~57.0.1",
     "expo-linking": "~57.0.9",
+    "expo-network": "^57.0.1",
     "expo-router": "~57.0.19",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
@@ -30,6 +31,7 @@
     "react-native-mmkv": "^4.3.2",
     "react-native-nitro-modules": "^0.37.1",
     "react-native-safe-area-context": "~5.7.0",
+    "react-native-tcp-socket": "^6.4.2",
     "zod": "^4.0.0",
     "zustand": "^5.0.8"
   },
