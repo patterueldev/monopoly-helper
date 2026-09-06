@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "distribute:android": "firebase appdistribution:distribute --app 1:212760278503:android:0bb3be8ff4c4369ad6b942 --groups family"
   },
   "dependencies": {
     "@expo/ui": "~57.0.16",
