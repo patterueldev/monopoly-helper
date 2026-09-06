@@ -39,7 +39,7 @@ export function loadDraft<T>(storage: KeyValueStorage, id: string): T | null { c
 export function scanEvents(raw: string): { events: GameEvent[]; corrupt: boolean } {
   const events: GameEvent[] = []; const text = raw.trim(); if (!text.startsWith('[')) return { events, corrupt: true }; let i = 1;
   const ws = () => { while (/\s/.test(text[i] ?? '')) i += 1; };
-  while (i < text.length) { ws(); if (text[i] === ']') return { events, corrupt: i !== text.length - 1 }; const start = i; let braces = 0; let brackets = 0; let quoted = false; let escaped = false;
+  while (i < text.length) { ws(); if (text[i] === ']') { let previous = i - 1; while (previous > 0 && /\s/.test(text[previous])) previous -= 1; return { events, corrupt: i !== text.length - 1 || text[previous] === ',' }; } const start = i; let braces = 0; let brackets = 0; let quoted = false; let escaped = false;
     for (; i < text.length; i += 1) { const c = text[i]; if (quoted) { if (escaped) escaped = false; else if (c === '\\') escaped = true; else if (c === '"') quoted = false; continue; } if (c === '"') { quoted = true; continue; } if (c === '{') braces += 1; else if (c === '}') braces -= 1; else if (c === '[') brackets += 1; else if (c === ']') { if (braces === 0 && brackets === 0) break; brackets -= 1; } else if (c === ',' && braces === 0 && brackets === 0) break; }
     const piece = text.slice(start, i).trim(); if (!piece.startsWith('{') || braces !== 0 || quoted) return { events, corrupt: true }; try { events.push(JSON.parse(piece) as GameEvent); } catch { return { events, corrupt: true }; } ws(); if (text[i] === ',') { i += 1; continue; } if (text[i] === ']') return { events, corrupt: i !== text.length - 1 }; return { events, corrupt: true };
   }
