@@ -16,12 +16,14 @@ declare const require: (name: string) => any;
 export function productionStorage(): KeyValueStorage { return require('react-native-mmkv').createMMKV({ id: 'monopoly-banker' }) as KeyValueStorage; }
 export const gameKey = (id: string) => `game:${id}`;
 export const draftKey = (id: string) => `draft:${id}`;
+export const lastGameId = (storage: KeyValueStorage) => storage.getString('lastGameId');
 
 export function saveGame(storage: KeyValueStorage, id: string, events: GameEvent[]) {
+  if (storage.getString(`${gameKey(id)}:version`) !== '1') storage.set(`${gameKey(id)}:version`, '1');
   storage.set(gameKey(id), JSON.stringify(events));
-  try { storage.set(`${gameKey(id)}:version`, '1'); storage.set(`${gameKey(id)}:lastSeq`, String(events.at(-1)?.seq ?? -1)); storage.set('lastGameId', id); } catch { /* advisory metadata must not fail a transaction */ }
+  try { storage.set(`${gameKey(id)}:lastSeq`, String(events.at(-1)?.seq ?? -1)); storage.set('lastGameId', id); } catch { /* advisory metadata must not fail a transaction */ }
 }
-export function loadGame(storage: KeyValueStorage, id: string): RecoveryResult {
+export function inspectGame(storage: KeyValueStorage, id: string): RecoveryResult {
   const raw = storage.getString(gameKey(id));
   if (!raw || storage.getString(`${gameKey(id)}:version`) !== '1') return { events: [], recovered: 0, corrupt: false, unrecoverable: true };
   const scan = scanEvents(raw);
@@ -29,10 +31,9 @@ export function loadGame(storage: KeyValueStorage, id: string): RecoveryResult {
   for (const event of scan.events) { const parsed = parseEvent(event); if (!parsed || parsed.seq !== valid.length || fold([...valid, parsed]).invalid) break; valid.push(parsed); }
   const state = fold(valid);
   const corrupt = scan.corrupt || valid.length !== scan.events.length;
-  if (corrupt) storage.set(`${gameKey(id)}:corrupt:${Date.now()}`, raw);
-  if (corrupt && valid.length > 0 && state.started) saveGame(storage, id, valid);
   return { events: valid, recovered: valid.length, corrupt, unrecoverable: !state.started };
 }
+export function loadGame(storage: KeyValueStorage, id: string): RecoveryResult { const result = inspectGame(storage, id); if (result.corrupt) { const raw = storage.getString(gameKey(id)); if (raw) storage.set(`${gameKey(id)}:corrupt:${Date.now()}`, raw); if (result.events.length > 0 && !result.unrecoverable) saveGame(storage, id, result.events); } return result; }
 export function saveDraft(storage: KeyValueStorage, id: string, draft: unknown) { storage.set(draftKey(id), JSON.stringify(draft)); }
 export function loadDraft<T>(storage: KeyValueStorage, id: string): T | null { const raw = storage.getString(draftKey(id)); if (!raw) return null; try { return JSON.parse(raw) as T; } catch { return null; } }
 

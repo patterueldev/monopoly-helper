@@ -12,7 +12,7 @@ const accounts: Account[] = [
 describe('game store persistence boundary', () => {
   it('uses a fresh game id and persists before state publication', () => {
     const storage = new MemoryStorage(); const store = createGameStore(storage); const id = store.getState().createGame(DEFAULT_CONFIG, accounts);
-    expect(id).not.toBe('current'); expect(store.getState().gameId).toBe(id);
+    expect(id.ok).toBe(true); const gameId = id.ok ? id.value : ''; expect(gameId).not.toBe('current'); expect(store.getState().gameId).toBe(gameId);
     const result = store.getState().dispatch(makeEvent('transfer', { from: 'a', to: 'b', amount: 100, reason: { kind: 'other' } }, 'a', 1, 'payment'));
     expect(result.ok).toBe(true); expect(store.getState().state.balances.a).toBe(1400);
   });
