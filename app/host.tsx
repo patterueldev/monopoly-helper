@@ -1,31 +1,13 @@
-import { router } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 import { colors } from '../src/theme';
 import { useHostViewModel } from '../src/viewmodels/useHostViewModel';
 
 export default function Host() {
   useKeepAwake();
   const vm = useHostViewModel();
-  const [offlineName, setOfflineName] = useState('');
-  const [offlineColor, setOfflineColor] = useState<string | null>(null);
-  const [showAddOffline, setShowAddOffline] = useState(false);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
-
-  const selectedOfflineColor = offlineColor && vm.availableColors.includes(offlineColor)
-    ? offlineColor
-    : (vm.availableColors[0] ?? null);
-
-  const onAddOffline = () => {
-    if (!offlineName.trim()) return;
-    const result = vm.addLocalPlayer(offlineName, selectedOfflineColor ?? undefined);
-    if (result.ok) {
-      setOfflineName('');
-      setOfflineColor(null);
-      setShowAddOffline(false);
-    }
-  };
 
   const onChangePlayerColor = (playerId: string, color: string) => {
     vm.updatePlayerColor(playerId, color);
@@ -170,91 +152,11 @@ export default function Host() {
               );
             })}
           </View>
-
-          {/* Add offline player toggle */}
-          {vm.players.length < 8 ? (
-            showAddOffline ? (
-              <View style={{ gap: 10, marginTop: 6, paddingTop: 10, borderTopWidth: 1, borderColor: colors.border }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.muted }}>
-                  Add player without a phone:
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TextInput
-                    value={offlineName}
-                    onChangeText={setOfflineName}
-                    placeholder="Player Name"
-                    placeholderTextColor={colors.muted}
-                    style={{
-                      flex: 1,
-                      backgroundColor: colors.cream,
-                      borderColor: colors.border,
-                      borderWidth: 1,
-                      borderRadius: 10,
-                      padding: 10,
-                      fontSize: 16,
-                    }}
-                  />
-                  <Pressable
-                    onPress={onAddOffline}
-                    style={{
-                      backgroundColor: colors.green,
-                      paddingHorizontal: 16,
-                      borderRadius: 10,
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ color: colors.white, fontWeight: '800' }}>Add</Text>
-                  </Pressable>
-                </View>
-
-                {/* Color swatches for offline player */}
-                {vm.availableColors.length > 0 ? (
-                  <View style={{ gap: 6 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted }}>
-                      Token color:
-                    </Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                      {vm.availableColors.map((color) => {
-                        const isSelected = selectedOfflineColor === color;
-                        return (
-                          <Pressable
-                            key={color}
-                            onPress={() => setOfflineColor(color)}
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 16,
-                              backgroundColor: color,
-                              borderWidth: isSelected ? 3 : 1,
-                              borderColor: isSelected ? colors.ink : 'rgba(0,0,0,0.15)',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transform: [{ scale: isSelected ? 1.15 : 1 }],
-                            }}
-                          >
-                            {isSelected ? (
-                              <Text style={{ color: colors.white, fontWeight: '900', fontSize: 14 }}>✓</Text>
-                            ) : null}
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                ) : null}
-              </View>
-            ) : (
-              <Pressable onPress={() => setShowAddOffline(true)} style={{ alignSelf: 'flex-start', marginTop: 4 }}>
-                <Text style={{ color: colors.green, fontWeight: '700', fontSize: 15 }}>
-                  + Add player without phone
-                </Text>
-              </Pressable>
-            )
-          ) : null}
         </View>
 
         {/* Start Game Button */}
         <Pressable
-          onPress={() => router.replace('/table')}
+          onPress={vm.startGame}
           disabled={!vm.canStartGame}
           style={{
             backgroundColor: vm.canStartGame ? colors.green : colors.border,
@@ -282,3 +184,4 @@ export default function Host() {
     </SafeAreaView>
   );
 }
+
