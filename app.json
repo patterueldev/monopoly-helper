@@ -12,8 +12,7 @@
       "appleTeamId": "2ZL598ZSDC"
     },
     "android": {
-      "package": "dev.patteruel.monopolybanker",
-      "googleServicesFile": "./google-services.json"
+      "package": "dev.patteruel.monopolybanker"
     },
     "plugins": [
       "expo-router"
