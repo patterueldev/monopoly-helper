@@ -51,10 +51,19 @@ export class HostTransport implements Transport {
   }
 
   listen(port: number = DEFAULT_PORT): Promise<void> {
+    if (this.server) {
+      this.close();
+    }
     return new Promise((resolve, reject) => {
+      let resolved = false;
       const server = TcpSocket.createServer(socket => this.onConnection(socket));
-      server.on('error', (err: Error) => reject(err));
+      server.on('error', (err: Error) => {
+        if (!resolved) {
+          reject(err);
+        }
+      });
       server.listen({ port, host: '0.0.0.0' }, () => {
+        resolved = true;
         this.server = server;
         this.heartbeatTimer = setInterval(() => this.checkHeartbeats(), 5000);
         resolve();

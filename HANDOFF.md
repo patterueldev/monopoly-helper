@@ -59,13 +59,14 @@ single-device "banker" app).
    - Supports local signing and direct TestFlight upload from the runner using App Store Connect API Key secrets (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY`).
    - Triggered on manual dispatch (`workflow_dispatch`), remaining idle until Apple Developer credentials are added.
 
-9. **1-Tap Multiplayer Lobby & Zero-Config LAN Discovery** (PR #20) —
-   - **1-Tap Host Lobby**: Host taps "Host Game" from the home screen and immediately launches their room with their profile + Bank without having to manually pre-populate player names. Live lobby view at `app/host.tsx` waits for players to join over Wi-Fi, supports adding offline players without phones, and enables "Start Game" once 2+ players are present.
+9. **Multiplayer Lobby, Zero-Config LAN Discovery & Robust Socket Lifecycle** (PR #20, #28) —
+   - **Host Profile & Setup**: Host can enter/confirm their player name and token color before launching the room. Live lobby view at `app/host.tsx` waits for players to join over Wi-Fi (phone-per-player) and enables "Start Game" once 2+ players are present.
+   - **Socket Teardown & EADDRINUSE Fix**: Defensive cleanup in `HostTransport.listen()`, `connectionStore.hostGame()`, and `useHostViewModel` unmount prevents port collisions when backing out and re-hosting.
    - **Subnet TCP Discovery**: Zero-config Wi-Fi table discovery via fast parallel subnet probing (`discovery.ts`, `discoveryLogic.ts`) over port 51837. Players tapping "Join Game" automatically see active nearby tables with host avatar, name, and room count, with a 1-tap "Join Table" action (and collapsible manual IP fallback).
 
 10. **Color Conflict Prevention & Interactive Alternative Color Selection** (PR #21) —
    - **Join-time Conflict Resolution**: When a player joins a table where their preferred color is already taken by the host or an earlier participant, the app presents an interactive **Color Selection Card** showing who holds the color and allows them to pick from remaining available colors before entering the table.
-   - **Host Lobby Color Swatches**: Host can select an available color for offline players and tap any player token in the lobby to cycle/change to an available color before starting.
+   - **Host Lobby Color Swatches**: Players in the lobby can tap their player token to cycle/change to an available color before starting.
    - **Pass & Play Collision Guard**: Guaranteed conflict-free auto-assignment of unused colors across all single-device players.
 
 ## Working conventions established this project

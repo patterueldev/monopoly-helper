@@ -43,6 +43,17 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
     hostGame: async (port = DEFAULT_PORT) => {
       const game = store.getState();
       if (!game.gameId) return { ok: false, error: 'No game to host' };
+
+      if (hostTransport) {
+        hostTransport.close();
+        hostTransport = null;
+      }
+      if (clientTransport) {
+        clientTransport.close();
+        clientTransport = null;
+      }
+      stopPeerPoll();
+
       const transport = new HostTransport({
         gameId: game.gameId,
         dispatch: intent => store.getState().dispatch(intent),
@@ -50,9 +61,10 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
       });
       try {
         await transport.listen(port);
-      } catch {
-        set({ status: 'error', lastError: "Couldn't start hosting" });
-        return { ok: false, error: "Couldn't start hosting" };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Couldn't start hosting";
+        set({ status: 'error', lastError: message });
+        return { ok: false, error: message };
       }
       hostTransport = transport;
       store.getState().attachTransport(transport, 'host', { onHostEvent: (event: GameEvent) => transport.broadcastEvent(event) });
