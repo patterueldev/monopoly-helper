@@ -9,7 +9,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.patteruel.monopolybanker",
-      "appleTeamId": "2ZL598ZSDC"
+      "appleTeamId": "2ZL598ZSDC",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "dev.patteruel.monopolybanker"
