@@ -26,7 +26,7 @@ single-device "banker" app).
   - #3 Turn tracking + rent/jail events (PR #10)
   - #4 Itemized settlement mode (PR #11)
   - #5 Per-device player profile (PR #9)
-  - #6 CI: build + distribute Android builds via GitHub Actions (PR #12, #13, #14, #15)
+  - #6 CI: build + distribute Android builds via GitHub Actions (PR #12–#15, #17, #18)
 - **`main` branch requires PRs** — branch protection is on, direct pushes to
   `main` are rejected. Branch, PR, merge.
 
@@ -47,10 +47,14 @@ single-device "banker" app).
 6. **Itemized settlement mode** (PR #11, Issue #4) — `settlementCalculations.ts`,
    `useSettlementViewModel.ts`, itemized property/houses/hotels/mortgage inputs,
    real-time net worth and leaderboard ranking.
-7. **CI Android APK build & GitHub Release** (PR #12–#15, Issue #6) — GHA
-   workflow triggered on push to `main` or manual dispatch. Builds APK via EAS
-   cloud, downloads it, and creates a public GitHub Release with the APK
-   attached. No Firebase required.
+7. **CI Android APK build & GitHub Release** (PR #12–#15, #17, #18, Issue #6) —
+   GHA workflow (`build-android.yml`) compiles `.apk` locally on `ubuntu-latest`
+   via `eas build --local` (0 Expo cloud minutes), uploads the artifact, and
+   publishes to GitHub Releases. Ignores doc-only (`*.md`) commits on push.
+   Verified live with Release `Android Preview #7`.
+8. **On-demand iOS build workflow** (`build-ios.yml`, PR #17) — compiles `.ipa`
+   locally on `macos-latest` on manual dispatch (`workflow_dispatch` only).
+   Kept idle until Apple Developer credentials/team accounts are configured.
 
 ## Working conventions established this project
 
@@ -74,7 +78,12 @@ single-device "banker" app).
 - **This app cannot run in Expo Go** — `react-native-tcp-socket` is a native
   module. Use the automated APK from GitHub Releases or run a local dev build
   via `eas build --profile development`.
-- Automated Android builds publish to GitHub Releases under:
+- **Native builds use `legacy-peer-deps`** — `.npmrc` and `package.json`
+  `eas-build-pre-install` configure `legacy-peer-deps=true` so that `npm ci`
+  inside `eas build --local` succeeds without peer dependency resolution conflicts.
+- **EAS Project**: Linked to project ID `79ce84c4-5868-4ce2-977c-79569035af49`
+  under owner `jpteruel95`. Requires `EXPO_TOKEN` secret in GitHub Actions.
+- **Releases**: Download the latest installable Android APK from:
   `https://github.com/patterueldev/monopoly-helper/releases`
 
 ## Next steps & verification
@@ -85,3 +94,5 @@ single-device "banker" app).
   2. Host game creation + client join over local Wi-Fi.
   3. Turn advancement and rent transfer advisory actions.
   4. Fast vs. Itemized settlement calculations and final winner tally.
+- **iOS Apple Developer Account Setup**: When ready to produce iOS builds,
+  configure credentials via `eas credentials` and run the `build-ios.yml` workflow.
