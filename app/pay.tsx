@@ -5,9 +5,22 @@ import { useGameStore } from '../src/store/gameStore';
 import { useProfileStore } from '../src/store/profileStore';
 import { colors } from '../src/theme';
 import { buildTransfer } from '../src/ledger/intents';
+import { TransferReason } from '../src/ledger/types';
+
+type ReasonKind = 'rent' | 'trade' | 'tax' | 'buy' | 'card' | 'go' | 'other';
+
+const REASONS: Array<{ kind: ReasonKind; label: string }> = [
+  { kind: 'rent', label: 'Rent' },
+  { kind: 'trade', label: 'Trade' },
+  { kind: 'tax', label: 'Tax' },
+  { kind: 'buy', label: 'Buy' },
+  { kind: 'card', label: 'Card' },
+  { kind: 'go', label: 'Pass GO' },
+  { kind: 'other', label: 'Other' },
+];
 
 export default function Pay() {
-  const { to: paramTo } = useLocalSearchParams<{ to?: string }>();
+  const { to: paramTo, reason: paramReason } = useLocalSearchParams<{ to?: string; reason?: string }>();
   const state = useGameStore((x) => x.state);
   const dispatch = useGameStore((x) => x.dispatch);
   const findMyAccount = useProfileStore((x) => x.findMyAccount);
@@ -17,15 +30,18 @@ export default function Pay() {
 
   const initialFrom = myAccount ? myAccount.id : (players.find((p) => p.id !== paramTo)?.id ?? players[0]?.id ?? '');
   const initialTo = paramTo ?? (players.find((p) => p.id !== initialFrom)?.id ?? 'bank');
+  const initialReason: ReasonKind = REASONS.some((r) => r.kind === paramReason) ? (paramReason as ReasonKind) : 'other';
 
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
+  const [reason, setReason] = useState<ReasonKind>(initialReason);
   const [amount, setAmount] = useState('');
 
   const submit = () => {
     const value = Number(amount);
     if (!from || !to || !Number.isSafeInteger(value) || value <= 0 || from === to) return;
-    const intent = buildTransfer(state, from, to, value, { kind: 'other' }, state.events.length);
+    const transferReason: TransferReason = reason === 'other' ? { kind: 'other' } : { kind: reason };
+    const intent = buildTransfer(state, from, to, value, transferReason, state.events.length);
     const result = dispatch({ ...intent, intentId: `payment-${Date.now()}-${from}-${to}-${value}` });
     if (result.ok) router.back();
   };
@@ -91,6 +107,32 @@ export default function Pay() {
                 </Pressable>
               );
             })}
+        </View>
+
+        {/* Reason Selector */}
+        <Text style={{ fontWeight: '800', color: colors.muted, fontSize: 16 }}>Reason</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {REASONS.map((r) => {
+            const isSelected = reason === r.kind;
+            return (
+              <Pressable
+                key={r.kind}
+                onPress={() => setReason(r.kind)}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: 16,
+                  backgroundColor: isSelected ? colors.green : colors.white,
+                  borderColor: isSelected ? colors.green : colors.border,
+                  borderWidth: 1,
+                }}
+              >
+                <Text style={{ color: isSelected ? colors.white : colors.ink, fontWeight: '700', fontSize: 13 }}>
+                  {r.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         <TextInput
