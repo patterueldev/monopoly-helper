@@ -8,6 +8,12 @@ import { useJoinViewModel } from '../src/viewmodels/useJoinViewModel';
 export default function Join() {
   const vm = useJoinViewModel();
   const [showManual, setShowManual] = useState(false);
+  const [altColor, setAltColor] = useState<string | null>(null);
+
+  // Sync default altColor when conflict occurs
+  const conflictColors = vm.colorConflict?.availableColors;
+  const firstAvailable = conflictColors && conflictColors.length > 0 ? conflictColors[0] : null;
+  const selectedAltColor = altColor && conflictColors?.includes(altColor) ? altColor : firstAvailable;
 
   const onJoinDiscovered = async (dh: DiscoveredHost) => {
     const result = await vm.connectToHost(dh);
@@ -23,6 +29,14 @@ export default function Join() {
     }
   };
 
+  const onConfirmConflictColor = async () => {
+    if (!selectedAltColor) return;
+    const result = await vm.resolveColorConflict(selectedAltColor);
+    if (result.ok) {
+      router.replace('/table');
+    }
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
       <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }} keyboardShouldPersistTaps="handled">
@@ -31,7 +45,107 @@ export default function Join() {
           <Text style={{ color: colors.muted, fontSize: 16 }}>Connect to a table on your local Wi-Fi</Text>
         </View>
 
-        {vm.error ? (
+        {/* Color Conflict Resolution Card */}
+        {vm.colorConflict ? (
+          <View
+            style={{
+              backgroundColor: colors.white,
+              borderRadius: 16,
+              padding: 20,
+              gap: 14,
+              borderColor: colors.gold,
+              borderWidth: 2,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 11,
+                  backgroundColor: vm.colorConflict.takenColor,
+                }}
+              />
+              <Text style={{ fontSize: 18, fontWeight: '900', color: colors.ink, flex: 1 }}>
+                Token Color Taken
+              </Text>
+            </View>
+
+            <Text style={{ fontSize: 15, color: colors.ink, lineHeight: 22 }}>
+              Your color is already used by{' '}
+              <Text style={{ fontWeight: '800', color: colors.green }}>{vm.colorConflict.takenBy}</Text>.
+              Please choose an available color for this table:
+            </Text>
+
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.muted }}>
+                Available Colors ({vm.colorConflict.availableColors.length})
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {vm.colorConflict.availableColors.map((color) => {
+                  const isSelected = selectedAltColor === color;
+                  return (
+                    <Pressable
+                      key={color}
+                      onPress={() => setAltColor(color)}
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: color,
+                        borderWidth: isSelected ? 3 : 1,
+                        borderColor: isSelected ? colors.ink : 'rgba(0,0,0,0.15)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transform: [{ scale: isSelected ? 1.15 : 1 }],
+                      }}
+                    >
+                      {isSelected ? (
+                        <Text style={{ color: colors.white, fontWeight: '900', fontSize: 18 }}>✓</Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+              <Pressable
+                onPress={vm.cancelConflict}
+                style={{
+                  flex: 1,
+                  backgroundColor: colors.cream,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  padding: 14,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: colors.muted, fontSize: 16, fontWeight: '700' }}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={onConfirmConflictColor}
+                disabled={!selectedAltColor}
+                style={{
+                  flex: 2,
+                  backgroundColor: colors.green,
+                  padding: 14,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  opacity: selectedAltColor ? 1 : 0.6,
+                }}
+              >
+                <Text style={{ color: colors.white, fontSize: 16, fontWeight: '800' }}>
+                  Confirm & Join
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {vm.error && !vm.colorConflict ? (
           <View style={{ backgroundColor: '#fde8e8', padding: 14, borderRadius: 12 }}>
             <Text style={{ color: colors.red, fontWeight: '700' }}>{vm.error}</Text>
           </View>

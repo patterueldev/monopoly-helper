@@ -151,4 +151,27 @@ describe('multiplayer lobby & dynamic player joining', () => {
     expect(s.balances.player2).toBe(1500);
     expect(circulation(s)).toBe(3000);
   });
+
+  it('rejects player.joined with conflicting/duplicate color', () => {
+    const hostOnly = makeEvent('game.started', { config: DEFAULT_CONFIG, accounts: [bank, p('host', '#3498db')] }, 'bank', 0, 'host-start');
+    const duplicateColorJoin = makeEvent('player.joined', { account: p('player2', '#3498db') }, 'bank', 1, 'join-p2-conflict');
+    const s = fold([hostOnly, duplicateColorJoin]);
+    expect(s.invalid).toBe(true);
+  });
+
+  it('rejects player.renamed with duplicate color of another player', () => {
+    const s0 = fold([started()]); // p('a', '#fff'), p('b', '#f00')
+    const renameConflict = makeEvent('player.renamed', { accountId: 'b', name: 'b', color: '#fff' }, 'bank', 1, 'rename-b');
+    const s1 = fold([started(), renameConflict]);
+    expect(s1.invalid).toBe(true);
+  });
+
+  it('allows player.renamed to update color to an available color', () => {
+    const s0 = fold([started()]); // p('a', '#fff'), p('b', '#f00')
+    const renameOk = makeEvent('player.renamed', { accountId: 'b', name: 'b', color: '#00f' }, 'bank', 1, 'rename-b-ok');
+    const s1 = fold([started(), renameOk]);
+    expect(s1.invalid).toBe(false);
+    expect(s1.accounts.b.color).toBe('#00f');
+  });
 });
+

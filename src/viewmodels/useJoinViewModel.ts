@@ -16,6 +16,12 @@ const uuid = () => {
   }
 };
 
+export interface ColorConflictInfo {
+  takenBy: string;
+  takenColor: string;
+  availableColors: string[];
+}
+
 /** Composes connectionStore and profileStore into what app/join.tsx renders:
  * Player name and token color, auto-discovered LAN hosts, manual IP/port, connect action, and live status. */
 export function useJoinViewModel() {
@@ -34,6 +40,7 @@ export function useJoinViewModel() {
 
   const [discoveredHosts, setDiscoveredHosts] = useState<DiscoveredHost[]>([]);
   const [isScanning, setIsScanning] = useState(true);
+  const [colorConflict, setColorConflict] = useState<ColorConflictInfo | null>(null);
 
   // Leave a still-connecting attempt behind if this screen is dismissed before
   // it resolves — but not a session the user successfully joined and then
@@ -67,6 +74,7 @@ export function useJoinViewModel() {
   }, [rescan]);
 
   const connectWithTarget = async (targetHost: string, targetPort: number) => {
+    setColorConflict(null);
     const trimmedName = playerName.trim();
     if (!trimmedName) {
       return { ok: false as const, error: 'Enter your player name' };
@@ -82,7 +90,7 @@ export function useJoinViewModel() {
     if (!joinResult.ok) return joinResult;
 
     // After connecting and seeding the replica game, check if this player already
-    // exists in the host's accounts. If not, submit a player.joined intent.
+    // exists in the host's accounts.
     const game = useGameStore.getState();
     const existingAccounts = Object.values(game.state.accounts).filter((a) => a.kind === 'player');
     const existingPlayer = existingAccounts.find(
@@ -91,30 +99,86 @@ export function useJoinViewModel() {
 
     if (!existingPlayer) {
       const usedColors = new Set(existingAccounts.map((a) => a.color));
-      let chosenColor = playerColor;
-      if (usedColors.has(chosenColor)) {
-        const available = PLAYER_PALETTE.find((c) => !usedColors.has(c));
-        if (available) chosenColor = available;
+
+      if (usedColors.has(playerColor)) {
+        const holder = existingAccounts.find((a) => a.color === playerColor);
+        const available = PLAYER_PALETTE.filter((c) => !usedColors.has(c));
+        setColorConflict({
+          takenBy: holder?.name ?? 'Another player',
+          takenColor: playerColor,
+          availableColors: available,
+        });
+        return {
+          ok: false as const,
+          conflict: true as const,
+          error: `Color is already taken by ${holder?.name ?? 'another player'}`,
+        };
       }
 
       const account: Account = {
         id: uuid(),
         kind: 'player',
         name: trimmedName,
-        color: chosenColor,
+        color: playerColor,
         unlimited: false,
         assets: [],
       };
 
-      game.dispatch({
+      const dispatchResult = game.dispatch({
         type: 'player.joined',
         actorId: 'bank',
         intentId: `join-${Date.now()}-${account.id}`,
         payload: { account },
       });
+
+      if (!dispatchResult.ok) {
+        return { ok: false as const, error: dispatchResult.error };
+      }
     }
 
     return { ok: true as const, value: undefined };
+  };
+
+  const resolveColorConflict = async (chosenColor: string) => {
+    const trimmedName = playerName.trim();
+    const game = useGameStore.getState();
+    const existingAccounts = Object.values(game.state.accounts).filter((a) => a.kind === 'player');
+    const usedColors = new Set(existingAccounts.map((a) => a.color));
+
+    if (usedColors.has(chosenColor)) {
+      return { ok: false as const, error: 'That color is also already taken' };
+    }
+
+    setPlayerColor(chosenColor);
+    saveProfile({ name: trimmedName, color: chosenColor });
+
+    const account: Account = {
+      id: uuid(),
+      kind: 'player',
+      name: trimmedName,
+      color: chosenColor,
+      unlimited: false,
+      assets: [],
+    };
+
+    const dispatchResult = game.dispatch({
+      type: 'player.joined',
+      actorId: 'bank',
+      intentId: `join-${Date.now()}-${account.id}`,
+      payload: { account },
+    });
+
+    if (!dispatchResult.ok) {
+      return { ok: false as const, error: dispatchResult.error };
+    }
+
+    setColorConflict(null);
+    return { ok: true as const, value: undefined };
+  };
+
+  const cancelConflict = () => {
+    setColorConflict(null);
+    leaveSession();
   };
 
   const connect = () => connectWithTarget(host, Number(port) || DEFAULT_PORT);
@@ -144,5 +208,9 @@ export function useJoinViewModel() {
     rescan,
     connect,
     connectToHost,
+    colorConflict,
+    resolveColorConflict,
+    cancelConflict,
   };
 }
+

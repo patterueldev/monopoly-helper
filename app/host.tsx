@@ -9,15 +9,27 @@ export default function Host() {
   useKeepAwake();
   const vm = useHostViewModel();
   const [offlineName, setOfflineName] = useState('');
+  const [offlineColor, setOfflineColor] = useState<string | null>(null);
   const [showAddOffline, setShowAddOffline] = useState(false);
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+
+  const selectedOfflineColor = offlineColor && vm.availableColors.includes(offlineColor)
+    ? offlineColor
+    : (vm.availableColors[0] ?? null);
 
   const onAddOffline = () => {
     if (!offlineName.trim()) return;
-    const result = vm.addLocalPlayer(offlineName);
+    const result = vm.addLocalPlayer(offlineName, selectedOfflineColor ?? undefined);
     if (result.ok) {
       setOfflineName('');
+      setOfflineColor(null);
       setShowAddOffline(false);
     }
+  };
+
+  const onChangePlayerColor = (playerId: string, color: string) => {
+    vm.updatePlayerColor(playerId, color);
+    setEditingPlayerId(null);
   };
 
   return (
@@ -63,58 +75,106 @@ export default function Host() {
           </View>
 
           <View style={{ gap: 8 }}>
-            {vm.players.map((player, idx) => (
-              <View
-                key={player.id}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: 12,
-                  backgroundColor: colors.cream,
-                  borderRadius: 10,
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            {vm.players.map((player, idx) => {
+              const isEditing = editingPlayerId === player.id;
+              return (
+                <View key={player.id} style={{ gap: 8 }}>
                   <View
                     style={{
-                      width: 20,
-                      height: 20,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: 12,
+                      backgroundColor: colors.cream,
                       borderRadius: 10,
-                      backgroundColor: player.color,
-                    }}
-                  />
-                  <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink }}>
-                    {player.name}
-                  </Text>
-                </View>
-
-                <View
-                  style={{
-                    backgroundColor: idx === 0 ? colors.green : colors.border,
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 8,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: idx === 0 ? colors.white : colors.muted,
-                      fontSize: 12,
-                      fontWeight: '800',
                     }}
                   >
-                    {idx === 0 ? 'HOST (YOU)' : 'CONNECTED'}
-                  </Text>
+                    <Pressable
+                      onPress={() => setEditingPlayerId(isEditing ? null : player.id)}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+                    >
+                      <View
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          backgroundColor: player.color,
+                          borderWidth: 2,
+                          borderColor: isEditing ? colors.green : 'rgba(0,0,0,0.1)',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      />
+                      <View>
+                        <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink }}>
+                          {player.name}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: colors.muted }}>Tap token to change color</Text>
+                      </View>
+                    </Pressable>
+
+                    <View
+                      style={{
+                        backgroundColor: idx === 0 ? colors.green : colors.border,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                        borderRadius: 8,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: idx === 0 ? colors.white : colors.muted,
+                          fontSize: 12,
+                          fontWeight: '800',
+                        }}
+                      >
+                        {idx === 0 ? 'HOST (YOU)' : 'CONNECTED'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Inline Color Chooser if user is editing this player's color */}
+                  {isEditing && vm.availableColors.length > 0 ? (
+                    <View
+                      style={{
+                        backgroundColor: colors.white,
+                        padding: 12,
+                        borderRadius: 10,
+                        gap: 8,
+                        borderColor: colors.border,
+                        borderWidth: 1,
+                      }}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted }}>
+                        Choose alternative color for {player.name}:
+                      </Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                        {vm.availableColors.map((color) => (
+                          <Pressable
+                            key={color}
+                            onPress={() => onChangePlayerColor(player.id, color)}
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 16,
+                              backgroundColor: color,
+                              borderWidth: 1,
+                              borderColor: 'rgba(0,0,0,0.15)',
+                            }}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
 
           {/* Add offline player toggle */}
           {vm.players.length < 8 ? (
             showAddOffline ? (
-              <View style={{ gap: 8, marginTop: 6, paddingTop: 10, borderTopWidth: 1, borderColor: colors.border }}>
+              <View style={{ gap: 10, marginTop: 6, paddingTop: 10, borderTopWidth: 1, borderColor: colors.border }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: colors.muted }}>
                   Add player without a phone:
                 </Text>
@@ -146,6 +206,41 @@ export default function Host() {
                     <Text style={{ color: colors.white, fontWeight: '800' }}>Add</Text>
                   </Pressable>
                 </View>
+
+                {/* Color swatches for offline player */}
+                {vm.availableColors.length > 0 ? (
+                  <View style={{ gap: 6 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted }}>
+                      Token color:
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {vm.availableColors.map((color) => {
+                        const isSelected = selectedOfflineColor === color;
+                        return (
+                          <Pressable
+                            key={color}
+                            onPress={() => setOfflineColor(color)}
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 16,
+                              backgroundColor: color,
+                              borderWidth: isSelected ? 3 : 1,
+                              borderColor: isSelected ? colors.ink : 'rgba(0,0,0,0.15)',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transform: [{ scale: isSelected ? 1.15 : 1 }],
+                            }}
+                          >
+                            {isSelected ? (
+                              <Text style={{ color: colors.white, fontWeight: '900', fontSize: 14 }}>✓</Text>
+                            ) : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ) : null}
               </View>
             ) : (
               <Pressable onPress={() => setShowAddOffline(true)} style={{ alignSelf: 'flex-start', marginTop: 4 }}>
