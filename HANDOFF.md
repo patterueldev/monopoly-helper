@@ -108,5 +108,4 @@ single-device "banker" app).
   4. Joining with a conflicting token color and selecting an alternative available color.
   5. Turn advancement and rent transfer advisory actions.
   6. Fast vs. Itemized settlement calculations and final winner tally.
-- **iOS Apple Developer Account Setup**: When ready to produce iOS builds,
-  configure credentials via `eas credentials` and run the `build-ios.yml` workflow.
+- **iOS Apple Developer Account Setup (Issue #26)**: When ready to produce and submit iOS builds to TestFlight, follow the checklist in [#26](https://github.com/patterueldev/monopoly-helper/issues/26) to add `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_PRIVATE_KEY` to GitHub Secrets and dispatch the `build-ios.yml` workflow.
