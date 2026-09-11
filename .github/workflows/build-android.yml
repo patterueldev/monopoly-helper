@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -30,6 +30,7 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
 
       - name: Build APK (EAS cloud)
         id: eas
@@ -40,7 +41,7 @@ jobs:
             --non-interactive \
             --json \
             --wait)
-          APK_URL=$(echo "$OUTPUT" | jq -r '.[0].artifacts.buildUrl')
+          APK_URL=$(echo "$OUTPUT" | jq -r '.[0].artifacts.applicationArchiveUrl // .[0].artifacts.buildUrl')
           echo "apk_url=$APK_URL" >> "$GITHUB_OUTPUT"
 
       - name: Download APK
