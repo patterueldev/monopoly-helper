@@ -61,11 +61,12 @@ jobs:
         id: asc-key-setup
         run: |
           if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_PRIVATE_KEY" ]; then
-            echo "Configuring App Store Connect API Key for local signing and TestFlight submission..."
-            mkdir -p ~/.appstoreconnect/private_keys
+            echo "Configuring App Store Connect API Key for local signing and direct TestFlight submission..."
+            mkdir -p ~/.appstoreconnect/private_keys ~/.private_keys
             KEY_FILE="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
             echo "$ASC_PRIVATE_KEY" > "$KEY_FILE"
-            chmod 600 "$KEY_FILE"
+            cp "$KEY_FILE" "$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"
+            chmod 600 "$KEY_FILE" "$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8"
             echo "EXPO_ASC_API_KEY_ID=$ASC_KEY_ID" >> $GITHUB_ENV
             echo "EXPO_ASC_ISSUER_ID=$ASC_ISSUER_ID" >> $GITHUB_ENV
             echo "EXPO_ASC_API_KEY_PATH=$KEY_FILE" >> $GITHUB_ENV
@@ -110,18 +111,19 @@ jobs:
             Profile: `${{ inputs.build_profile || 'production' }}`
           files: monopoly-banker-ios.ipa
 
-      - name: Upload to TestFlight (Direct from runner)
+      - name: Upload to TestFlight (Direct from runner via Apple altool)
         if: ${{ inputs.upload_to_testflight && steps.asc-key-setup.outputs.has_asc_key == 'true' }}
         run: |
-          echo "Submitting compiled IPA to TestFlight via App Store Connect API..."
-          eas submit \
-            --platform ios \
-            --path monopoly-banker-ios.ipa \
-            --profile production \
-            --non-interactive
+          echo "Submitting compiled IPA directly to Apple TestFlight using xcrun altool..."
+          xcrun altool --upload-app \
+            -f monopoly-banker-ios.ipa \
+            -t ios \
+            --apiKey "$ASC_KEY_ID" \
+            --apiIssuer "$ASC_ISSUER_ID"
 
       - name: Cleanup temporary credentials
         if: always()
         run: |
-          rm -rf ~/.appstoreconnect/private_keys/AuthKey_*.p8 || true
+          rm -rf ~/.appstoreconnect/private_keys/AuthKey_*.p8 ~/.private_keys/AuthKey_*.p8 || true
+
 
