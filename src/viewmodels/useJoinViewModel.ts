@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConnectionStore } from '../store/connectionStore';
 import { useGameStore } from '../store/gameStore';
 import { useProfileStore } from '../store/profileStore';
 import { DEFAULT_PORT } from '../transport/wireProtocol';
 import { PLAYER_PALETTE } from '../theme';
 import { Account } from '../ledger/types';
+import { DiscoveredHost, scanLocalSubnet } from '../transport/discovery';
 
 declare const require: (name: string) => any;
 const uuid = () => {
@@ -16,8 +17,7 @@ const uuid = () => {
 };
 
 /** Composes connectionStore and profileStore into what app/join.tsx renders:
- * Player name and token color, host IP/port, connect action, and live status/error.
- * Per plan.md Section 11 item 6 and Section 12 MVVM architecture. */
+ * Player name and token color, auto-discovered LAN hosts, manual IP/port, connect action, and live status. */
 export function useJoinViewModel() {
   const status = useConnectionStore((s) => s.status);
   const lastError = useConnectionStore((s) => s.lastError);
@@ -32,6 +32,9 @@ export function useJoinViewModel() {
   const [host, setHost] = useState('');
   const [port, setPort] = useState(String(DEFAULT_PORT));
 
+  const [discoveredHosts, setDiscoveredHosts] = useState<DiscoveredHost[]>([]);
+  const [isScanning, setIsScanning] = useState(true);
+
   // Leave a still-connecting attempt behind if this screen is dismissed before
   // it resolves — but not a session the user successfully joined and then
   // navigated on from (e.g. to /table), which owns its own lifetime after that.
@@ -39,20 +42,43 @@ export function useJoinViewModel() {
   statusRef.current = status;
   useEffect(() => () => { if (statusRef.current !== 'connected') leaveSession(); }, []);
 
-  const connect = async () => {
+  const rescan = useCallback(async () => {
+    setIsScanning(true);
+    setDiscoveredHosts([]);
+    try {
+      await scanLocalSubnet({
+        port: Number(port) || DEFAULT_PORT,
+        onHostFound: (newHost) => {
+          setDiscoveredHosts((prev) => {
+            if (prev.some((h) => h.ip === newHost.ip)) return prev;
+            return [...prev, newHost];
+          });
+        },
+      });
+    } catch {
+      // Ignore scan failures in background
+    } finally {
+      setIsScanning(false);
+    }
+  }, [port]);
+
+  useEffect(() => {
+    rescan();
+  }, [rescan]);
+
+  const connectWithTarget = async (targetHost: string, targetPort: number) => {
     const trimmedName = playerName.trim();
     if (!trimmedName) {
       return { ok: false as const, error: 'Enter your player name' };
     }
-    if (!host.trim()) {
+    if (!targetHost.trim()) {
       return { ok: false as const, error: 'Enter the host device’s IP address' };
     }
 
     // Persist confirmed profile so it survives across sessions
     saveProfile({ name: trimmedName, color: playerColor });
 
-    const portNumber = Number(port) || DEFAULT_PORT;
-    const joinResult = await joinGame(host.trim(), portNumber);
+    const joinResult = await joinGame(targetHost.trim(), targetPort);
     if (!joinResult.ok) return joinResult;
 
     // After connecting and seeding the replica game, check if this player already
@@ -91,6 +117,14 @@ export function useJoinViewModel() {
     return { ok: true as const, value: undefined };
   };
 
+  const connect = () => connectWithTarget(host, Number(port) || DEFAULT_PORT);
+
+  const connectToHost = (dh: DiscoveredHost) => {
+    setHost(dh.ip);
+    setPort(String(dh.port));
+    return connectWithTarget(dh.ip, dh.port);
+  };
+
   return {
     playerName,
     setPlayerName,
@@ -105,6 +139,10 @@ export function useJoinViewModel() {
     error: lastError,
     isConnecting: status === 'connecting' || status === 'reconnecting',
     isConnected: status === 'connected',
+    discoveredHosts,
+    isScanning,
+    rescan,
     connect,
+    connectToHost,
   };
 }

@@ -130,3 +130,25 @@ describe('jail status (advisory only)', () => {
     expect(isJailed(s, 'a')).toBe(false);
   });
 });
+
+describe('multiplayer lobby & dynamic player joining', () => {
+  it('allows starting a game with 1 player (Host) + Bank', () => {
+    const hostOnly = makeEvent('game.started', { config: DEFAULT_CONFIG, accounts: [bank, p('host', '#3498db')] }, 'bank', 0, 'host-start');
+    const s = fold([hostOnly]);
+    expect(s.invalid).toBe(false);
+    expect(s.started).toBe(true);
+    expect(Object.keys(s.accounts)).toEqual(['bank', 'host']);
+    expect(s.balances.host).toBe(1500);
+    expect(s.currentTurnAccountId).toBe('host');
+  });
+
+  it('allows additional players to join mid-lobby via player.joined', () => {
+    const hostOnly = makeEvent('game.started', { config: DEFAULT_CONFIG, accounts: [bank, p('host', '#3498db')] }, 'bank', 0, 'host-start');
+    const player2Join = makeEvent('player.joined', { account: p('player2', '#e74c3c') }, 'bank', 1, 'join-p2');
+    const s = fold([hostOnly, player2Join]);
+    expect(s.invalid).toBe(false);
+    expect(s.accounts.player2).toBeDefined();
+    expect(s.balances.player2).toBe(1500);
+    expect(circulation(s)).toBe(3000);
+  });
+});
