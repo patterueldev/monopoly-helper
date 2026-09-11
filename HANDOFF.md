@@ -52,9 +52,11 @@ single-device "banker" app).
    via `eas build --local` (0 Expo cloud minutes), uploads the artifact, and
    publishes to GitHub Releases. Ignores doc-only (`*.md`) commits on push.
    Verified live with Release `Android Preview #7`.
-8. **On-demand iOS build workflow** (`build-ios.yml`, PR #17) — compiles `.ipa`
-   locally on `macos-latest` on manual dispatch (`workflow_dispatch` only).
-   Kept idle until Apple Developer credentials/team accounts are configured.
+8. **Local iOS Build & Direct TestFlight Submission** (`build-ios.yml`, PR #17, #22, #23) —
+   - Compiles `.ipa` locally on `macos-latest` GitHub runner (0 Expo cloud minutes).
+   - Configured with `ascAppId: "6811088179"` in `eas.json`.
+   - Supports local signing and direct TestFlight upload from the runner using App Store Connect API Key secrets (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY`).
+   - Triggered on manual dispatch (`workflow_dispatch`), remaining idle until Apple Developer credentials are added.
 
 9. **1-Tap Multiplayer Lobby & Zero-Config LAN Discovery** (PR #20) —
    - **1-Tap Host Lobby**: Host taps "Host Game" from the home screen and immediately launches their room with their profile + Bank without having to manually pre-populate player names. Live lobby view at `app/host.tsx` waits for players to join over Wi-Fi, supports adding offline players without phones, and enables "Start Game" once 2+ players are present.
