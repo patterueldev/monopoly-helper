@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Monopoly Banker",
-    "slug": "monopoly-banker",
+    "slug": "monopoly-helper",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "monopolybanker",
@@ -19,6 +19,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "79ce84c4-5868-4ce2-977c-79569035af49"
+      }
+    },
+    "owner": "jpteruel95"
   }
 }
