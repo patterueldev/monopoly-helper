@@ -47,14 +47,15 @@ single-device "banker" app).
 6. **Itemized settlement mode** (PR #11, Issue #4) — `settlementCalculations.ts`,
    `useSettlementViewModel.ts`, itemized property/houses/hotels/mortgage inputs,
    real-time net worth and leaderboard ranking.
-7. **CI Android APK build & GitHub Release** (PR #12–#15, #17, #18, Issue #6) —
-   GHA workflow (`build-android.yml`) compiles `.apk` locally on `ubuntu-latest`
-   via `eas build --local` (0 Expo cloud minutes), uploads the artifact, and
-   publishes to GitHub Releases. Ignores doc-only (`*.md`) commits on push.
-   Verified live with Release `Android Preview #7`.
-8. **Local iOS Build & Direct TestFlight Submission** (`build-ios.yml`, PR #17, #22, #23) —
+7. **CI Android APK build & GitHub Release** (PR #12–#15, #17, #18, Issue #6, #24) —
+   - GHA workflow (`build-android.yml`) compiles `.apk` locally on `ubuntu-latest`
+     via `eas build --local` (0 Expo cloud minutes), uploads the artifact, and
+     publishes to GitHub Releases. Ignores doc-only (`*.md`) commits on push.
+   - Configured with `concurrency: { group: ..., cancel-in-progress: true }` so that rapid merges cancel obsolete intermediate builds and only the latest commit builds fully.
+   - Verified live with Release `Android Preview #7`.
+8. **Local iOS Build & Direct TestFlight Submission** (`build-ios.yml`, PR #17, #22, #23, Issue #24) —
    - Compiles `.ipa` locally on `macos-latest` GitHub runner (0 Expo cloud minutes).
-   - Configured with `ascAppId: "6811088179"` in `eas.json`.
+   - Configured with `ascAppId: "6811088179"` in `eas.json` and `concurrency: { cancel-in-progress: true }`.
    - Supports local signing and direct TestFlight upload from the runner using App Store Connect API Key secrets (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY`).
    - Triggered on manual dispatch (`workflow_dispatch`), remaining idle until Apple Developer credentials are added.
 
