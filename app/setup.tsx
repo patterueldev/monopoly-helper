@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors, PLAYER_PALETTE } from '../src/theme';
 import { DEFAULT_CONFIG, Account } from '../src/ledger/types';
@@ -13,6 +13,12 @@ export default function Setup() {
 
   const [names, setNames] = useState<string[]>(() => [profile?.name ?? '', '']);
   const createGame = useGameStore((x) => x.createGame);
+
+  useEffect(() => {
+    router.replace('/');
+  }, []);
+
+  if (mode !== 'enabled-for-development') return null;
 
   const p1Color = profile?.color ?? PLAYER_PALETTE[0];
   const remainingPalette = PLAYER_PALETTE.filter((c) => c !== p1Color);
@@ -49,7 +55,7 @@ export default function Setup() {
     ];
 
     const result = createGame(DEFAULT_CONFIG, accounts);
-    if (result.ok) router.replace(mode === 'host' ? '/host' : '/table');
+    if (result.ok) router.replace('/table');
   };
 
   return (

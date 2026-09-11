@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { applyEvent, fold, initialState } from './reducer';
 import { makeEvent } from './intents';
 import { circulation, isJailed, currentTurnPlayer, nextTurnPlayer } from './selectors';
-import { Account, DEFAULT_CONFIG } from './types';
+import { Account, DEFAULT_CONFIG, Settlement } from './types';
+import { buildTallyFromSettlements } from '../viewmodels/settlementCalculations';
 
 const bank: Account = { id: 'bank', kind: 'bank', name: 'Bank', color: '#000', unlimited: true, assets: [] };
 const p = (id: string, color = '#fff'): Account => ({ id, kind: 'player', name: id, color, unlimited: false, assets: [] });
@@ -175,3 +176,62 @@ describe('multiplayer lobby & dynamic player joining', () => {
   });
 });
 
+describe('multiplayer settlement lifecycle', () => {
+  const settlement = (playerId: string, value: number): Settlement => ({
+    playerId,
+    mode: 'itemized',
+    rows: [{ kind: 'mortgage', name: 'Boardwalk', value }],
+    valuation: value,
+    cash: 1500,
+    assetTotal: value,
+    netWorth: 1500 + value,
+  });
+
+  it('starts settlement, accepts named mortgage submissions, and ends after all players submit', () => {
+    const start = makeEvent('game.started', { config: DEFAULT_CONFIG, accounts: [bank, p('host', '#3498db'), p('b', '#e74c3c')], hostAccountId: 'host' }, 'bank', 0, 'settle-start');
+    const begin = makeEvent('settlement.started', { participantIds: ['host', 'b'] }, 'host', 1, 'settlement-begin');
+    const hostSettlement = makeEvent('settlement.submitted', { playerId: 'host', settlement: settlement('host', 500) }, 'host', 2, 'host-submitted');
+    const playerSettlement = makeEvent('settlement.submitted', { playerId: 'b', settlement: settlement('b', 300) }, 'b', 3, 'player-submitted');
+    const tally = buildTallyFromSettlements(
+      { bank, host: p('host', '#3498db'), b: p('b', '#e74c3c') },
+      { host: 1500, b: 1500 },
+      new Set(),
+      { host: settlement('host', 500), b: settlement('b', 300) },
+      new Set()
+    );
+    const ended = makeEvent('game.ended', { tally }, 'host', 4, 'settle-end');
+    const state = fold([start, begin, hostSettlement, playerSettlement, ended]);
+
+    expect(state.invalid).toBe(false);
+    expect(state.settlementStarted).toBe(true);
+    expect(state.settlementStatus).toEqual({ host: 'submitted', b: 'submitted' });
+    expect(state.ended).toBe(true);
+    expect(state.tally?.find((entry) => entry.playerId === 'host')?.assetTotal).toBe(500);
+  });
+
+  it('lets the Host dismiss a player and submit a Host override for that player', () => {
+    const start = makeEvent('game.started', { config: DEFAULT_CONFIG, accounts: [bank, p('host', '#3498db'), p('b', '#e74c3c')], hostAccountId: 'host' }, 'bank', 0, 'dismiss-start');
+    const begin = makeEvent('settlement.started', { participantIds: ['host', 'b'] }, 'host', 1, 'dismiss-begin');
+    const dismiss = makeEvent('settlement.dismissed', { playerId: 'b' }, 'host', 2, 'dismiss-b');
+    const hostSettlement = makeEvent('settlement.submitted', { playerId: 'host', settlement: settlement('host', 0) }, 'host', 3, 'dismiss-host');
+    const override = makeEvent('settlement.submitted', { playerId: 'b', settlement: settlement('b', 250) }, 'host', 4, 'dismiss-override');
+    const tally = buildTallyFromSettlements(
+      { bank, host: p('host', '#3498db'), b: p('b', '#e74c3c') },
+      { host: 1500, b: 1500 },
+      new Set(),
+      { host: settlement('host', 0), b: settlement('b', 250) },
+      new Set()
+    );
+    const ended = makeEvent('game.ended', { tally }, 'host', 5, 'dismiss-end');
+    const state = fold([start, begin, dismiss, hostSettlement, override, ended]);
+
+    expect(state.invalid).toBe(false);
+    expect(state.settlementStatus.b).toBe('submitted');
+    expect(state.tally?.find((entry) => entry.playerId === 'b')?.assetTotal).toBe(250);
+  });
+
+  it('rejects a client from starting or finalizing settlement', () => {
+    const start = makeEvent('game.started', { config: DEFAULT_CONFIG, accounts: [bank, p('host', '#3498db'), p('b', '#e74c3c')], hostAccountId: 'host' }, 'bank', 0, 'auth-start');
+    expect(applyEvent(fold([start]), makeEvent('settlement.started', { participantIds: ['host', 'b'] }, 'b', 1, 'client-start')).invalid).toBe(true);
+  });
+});

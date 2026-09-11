@@ -37,6 +37,21 @@ describe('settlementCalculations', () => {
     expect(total).toBe(850);
   });
 
+  it('sums named mortgage entries as the player asset valuation', () => {
+    const rows = buildItemizedRows({
+      mortgageEntries: [
+        { id: 'property', name: 'Boardwalk', value: '400' },
+        { id: 'station', name: 'Reading Railroad', value: '100' },
+      ],
+    });
+
+    expect(rows).toEqual([
+      { kind: 'mortgage', name: 'Boardwalk', value: 400 },
+      { kind: 'mortgage', name: 'Reading Railroad', value: 100 },
+    ]);
+    expect(computeItemizedAssetTotal(rows)).toBe(500);
+  });
+
   it('builds final tally in fast mode with correct ranks and ties', () => {
     const accounts = { bank, a: p('a'), b: p('b'), c: p('c') };
     const balances = { a: 1000, b: 1500, c: 500 };

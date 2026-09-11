@@ -50,7 +50,7 @@ export default function Home() {
       assets: [],
     };
 
-    const result = createGame(DEFAULT_CONFIG, [bank, hostAccount]);
+    const result = createGame(DEFAULT_CONFIG, [bank, hostAccount], hostAccount.id);
     if (result.ok) {
       setShowHostModal(false);
       router.push('/host');
@@ -71,14 +71,6 @@ export default function Home() {
         <Text style={{ fontSize: 18, color: colors.muted, marginBottom: 24 }}>
           The table’s money, handled.
         </Text>
-
-        <Link href="/setup" asChild>
-          <Pressable style={{ backgroundColor: colors.green, padding: 18, borderRadius: 14, alignItems: 'center' }}>
-            <Text style={{ color: colors.white, fontSize: 20, fontWeight: '800' }}>
-              Pass & Play (Single Device)
-            </Text>
-          </Pressable>
-        </Link>
 
         <Pressable
           onPress={openHostSetup}
@@ -221,4 +213,3 @@ export default function Home() {
     </SafeAreaView>
   );
 }
-

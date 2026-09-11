@@ -1,8 +1,11 @@
 import { Link, router } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
+import { useEffect } from 'react';
 import { Alert, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 import { useGameStore } from '../src/store/gameStore';
 import { useProfileStore } from '../src/store/profileStore';
+import { useConnectionStore } from '../src/store/connectionStore';
+import { useSettlementViewModel } from '../src/viewmodels/useSettlementViewModel';
 import { activePlayers, balance, circulation, currentTurnPlayer, nextTurnPlayer, isJailed } from '../src/ledger/selectors';
 import { colors } from '../src/theme';
 import { ConnectionBanner } from '../src/components/ConnectionBanner';
@@ -11,16 +14,31 @@ export default function Table() {
   useKeepAwake();
   const state = useGameStore((x) => x.state);
   const dispatch = useGameStore((x) => x.dispatch);
+  const settlementStarted = useGameStore((x) => x.state.settlementStarted);
+  const ended = useGameStore((x) => x.state.ended);
   const findMyAccount = useProfileStore((x) => x.findMyAccount);
+  const role = useConnectionStore((x) => x.role);
+  const settlement = useSettlementViewModel();
   const myAccount = findMyAccount(state.accounts);
 
   const players = activePlayers(state);
   const currentTurn = currentTurnPlayer(state);
   const nextTurn = nextTurnPlayer(state);
   const isMyTurn = !!(currentTurn && myAccount && currentTurn.id === myAccount.id);
+  const isHost = role === 'host';
+
+  useEffect(() => {
+    if (settlementStarted && !ended) router.replace('/settlement');
+  }, [settlementStarted, ended]);
+
+  const beginSettlement = () => {
+    const result = settlement.startSettlement();
+    if (result.ok) router.replace('/settlement');
+    else Alert.alert('Unable to start settlement', result.error);
+  };
 
   const passGo = (id: string) =>
-    dispatch({
+    isMyTurn && dispatch({
       type: 'transfer',
       actorId: 'bank',
       intentId: `go-${Date.now()}-${id}`,
@@ -28,7 +46,7 @@ export default function Table() {
     });
 
   const advanceTurn = () => {
-    if (!nextTurn) return;
+    if (!isMyTurn || !nextTurn) return;
     dispatch({
       type: 'turn.advanced',
       actorId: currentTurn?.id ?? 'bank',
@@ -50,7 +68,7 @@ export default function Table() {
   const onPlayerPress = (p: typeof players[0]) => {
     const jailed = isJailed(state, p.id);
     Alert.alert(p.name, `${state.config?.currencySymbol}${balance(state, p.id).toLocaleString()} · ${jailed ? 'In Jail' : 'Active'}`, [
-      { text: 'Pay this player', onPress: () => router.push({ pathname: '/pay', params: { to: p.id } }) },
+      ...(isMyTurn ? [{ text: 'Pay this player', onPress: () => router.push({ pathname: '/pay', params: { to: p.id } }) }] : []),
       { text: jailed ? 'Release from Jail' : 'Send to Jail', onPress: () => toggleJail(p.id) },
       { text: 'Cancel', style: 'cancel' },
     ]);
@@ -90,20 +108,8 @@ export default function Table() {
 
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Pressable
-                onPress={() => router.push({ pathname: '/pay', params: { to: currentTurn.id, reason: 'rent' } })}
-                style={{
-                  flex: 1,
-                  backgroundColor: colors.green,
-                  paddingVertical: 10,
-                  borderRadius: 8,
-                  alignItems: 'center',
-                }}
-              >
-                <Text style={{ color: colors.white, fontWeight: '700', fontSize: 14 }}>Collect Rent</Text>
-              </Pressable>
-
-              <Pressable
                 onPress={advanceTurn}
+                disabled={!isMyTurn}
                 style={{
                   flex: 1,
                   borderColor: colors.green,
@@ -112,6 +118,7 @@ export default function Table() {
                   borderRadius: 8,
                   alignItems: 'center',
                   backgroundColor: colors.white,
+                  opacity: isMyTurn ? 1 : 0.45,
                 }}
               >
                 <Text style={{ color: colors.green, fontWeight: '700', fontSize: 14 }}>End Turn →</Text>
@@ -175,12 +182,13 @@ export default function Table() {
         </Text>
 
         <Link href="/pay" asChild>
-          <Pressable style={{ backgroundColor: colors.green, padding: 16, borderRadius: 12, alignItems: 'center' }}>
+          <Pressable disabled={!isMyTurn} style={{ backgroundColor: colors.green, padding: 16, borderRadius: 12, alignItems: 'center', opacity: isMyTurn ? 1 : 0.45 }}>
             <Text style={{ color: colors.white, fontSize: 18, fontWeight: '800' }}>Pay</Text>
           </Pressable>
         </Link>
 
         <Pressable
+          disabled={!isMyTurn}
           onPress={() =>
             Alert.alert(
               'Pass GO',
@@ -188,16 +196,18 @@ export default function Table() {
               players.map((p) => ({ text: p.name, onPress: () => passGo(p.id) }))
             )
           }
-          style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center' }}
+          style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center', opacity: isMyTurn ? 1 : 0.45 }}
         >
           <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>Pass GO</Text>
         </Pressable>
 
-        <Link href="/settlement" asChild>
-          <Pressable style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center' }}>
-            <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>End game & settle</Text>
-          </Pressable>
-        </Link>
+        <Pressable
+          disabled={!isHost || settlementStarted}
+          onPress={beginSettlement}
+          style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center', opacity: isHost && !settlementStarted ? 1 : 0.45 }}
+        >
+          <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>{settlementStarted ? 'Settlement in progress' : 'End game & settle'}</Text>
+        </Pressable>
 
         <Link href="/history" asChild>
           <Pressable style={{ padding: 12, alignItems: 'center' }}>

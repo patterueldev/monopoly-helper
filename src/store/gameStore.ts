@@ -30,7 +30,7 @@ interface Store {
   role: GameRole;
   transport: Transport | null;
   dispatch: (intent: Intent) => Result<DispatchOutcome>;
-  createGame: (config: GameConfig, accounts: Account[]) => Result<string>;
+  createGame: (config: GameConfig, accounts: Account[], hostAccountId?: string) => Result<string>;
   loadGame: (id: string) => Result<{ recovered: number; corrupt: boolean }>;
   /** Seeds a client's local record from a host's `welcome` burst (or a later full resync). */
   createReplicaGame: (gameId: string, events: GameEvent[]) => Result<void>;
@@ -92,9 +92,9 @@ export const createGameStore = (storage: KeyValueStorage = defaultStorage()) => 
       }
     },
 
-    createGame: (config, accounts) => {
+    createGame: (config, accounts, hostAccountId) => {
       const id = uuid();
-      const event = { type: 'game.started' as const, payload: { config, accounts }, actorId: accounts.find(a => a.kind === 'bank')?.id ?? '', seq: 0, ts: Date.now(), intentId: uuid() };
+      const event = { type: 'game.started' as const, payload: { config, accounts, hostAccountId }, actorId: accounts.find(a => a.kind === 'bank')?.id ?? '', seq: 0, ts: Date.now(), intentId: uuid() };
       const state = fold([event]);
       if (state.invalid || !state.started) return { ok: false, error: 'Invalid game configuration' };
       try { saveGame(storage, id, [event]); set({ gameId: id, state }); return { ok: true, value: id }; } catch { return { ok: false, error: 'Could not save game' }; }

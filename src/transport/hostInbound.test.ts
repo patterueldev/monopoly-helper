@@ -75,4 +75,13 @@ describe('HostTransport handleInbound', () => {
     const outcome = handleInbound({ kind: 'welcome', protocolVersion: PROTOCOL_VERSION, gameId: 'g', events: [] }, ctx);
     expect(outcome).toEqual({ action: 'none' });
   });
+
+  it('rejects host-only settlement intents from clients before dispatch', () => {
+    const intent: Intent = { type: 'game.ended', payload: { tally: [] }, actorId: 'b', intentId: 'client-end' };
+    const ctx = contextWith(() => { throw new Error('must not dispatch'); });
+    expect(handleInbound({ kind: 'intent', intent }, ctx)).toEqual({
+      action: 'reply',
+      message: { kind: 'reject', intentId: 'client-end', reason: 'Only the Host can perform this action' },
+    });
+  });
 });

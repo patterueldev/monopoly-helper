@@ -1,12 +1,19 @@
 import { Account, Settlement, SettlementMode, SettlementRow } from '../ledger/types';
 
 export interface ItemizedPlayerEntry {
-  properties: string;
-  housesCount: string;
-  housesCost: string;
-  hotelsCount: string;
-  hotelsCost: string;
-  mortgages: string;
+  properties?: string;
+  housesCount?: string;
+  housesCost?: string;
+  hotelsCount?: string;
+  hotelsCost?: string;
+  mortgages?: string;
+  mortgageEntries?: MortgageEntry[];
+}
+
+export interface MortgageEntry {
+  id: string;
+  name: string;
+  value: string;
 }
 
 export const defaultItemizedEntry = (): ItemizedPlayerEntry => ({
@@ -16,6 +23,7 @@ export const defaultItemizedEntry = (): ItemizedPlayerEntry => ({
   hotelsCount: '',
   hotelsCost: '',
   mortgages: '',
+  mortgageEntries: [],
 });
 
 export function parseNonNegativeInt(input: string | undefined): number {
@@ -25,6 +33,14 @@ export function parseNonNegativeInt(input: string | undefined): number {
 }
 
 export function buildItemizedRows(entry: ItemizedPlayerEntry): SettlementRow[] {
+  if (entry.mortgageEntries) {
+    return entry.mortgageEntries.flatMap((mortgage) => {
+      const value = parseNonNegativeInt(mortgage.value);
+      const name = mortgage.name.trim();
+      return value > 0 && name ? [{ kind: 'mortgage' as const, name, value }] : [];
+    });
+  }
+
   const rows: SettlementRow[] = [];
 
   const propertyVal = parseNonNegativeInt(entry.properties);
@@ -57,6 +73,10 @@ export function buildItemizedRows(entry: ItemizedPlayerEntry): SettlementRow[] {
 }
 
 export function computeItemizedAssetTotal(rows: SettlementRow[]): number {
+  if (rows.length === 0 || rows.every((row) => row.kind === 'mortgage' && !!row.name)) {
+    return rows.reduce((sum, row) => sum + row.value, 0);
+  }
+
   return rows.reduce(
     (sum, r) =>
       sum +
@@ -105,7 +125,7 @@ export function buildFinalTally(
 ): Settlement[] {
   const players = Object.values(accounts).filter((a) => a.kind === 'player');
 
-  const activeSettlements = players
+  const settlements = players
     .filter((p) => !eliminated.has(p.id))
     .map((p) => {
       const cash = balances[p.id] ?? 0;
@@ -127,6 +147,41 @@ export function buildFinalTally(
       };
     });
 
+  return rankSettlements(players, eliminated, settlements);
+}
+
+export function buildTallyFromSettlements(
+  accounts: Record<string, Account>,
+  balances: Record<string, number>,
+  eliminated: Set<string>,
+  submitted: Record<string, Settlement>,
+  dismissed: Set<string>
+): Settlement[] {
+  const players = Object.values(accounts).filter((a) => a.kind === 'player');
+  const settlements = players
+    .filter((p) => !eliminated.has(p.id))
+    .map((p) => {
+      const existing = submitted[p.id];
+      if (existing) {
+        const cash = balances[p.id] ?? 0;
+        return { ...existing, cash, netWorth: cash + existing.assetTotal };
+      }
+      if (dismissed.has(p.id)) {
+        const cash = balances[p.id] ?? 0;
+        return { playerId: p.id, mode: 'itemized' as const, rows: [], valuation: 0, cash, assetTotal: 0, netWorth: cash };
+      }
+      return { playerId: p.id, mode: 'itemized' as const, rows: [], valuation: 0, cash: balances[p.id] ?? 0, assetTotal: 0, netWorth: balances[p.id] ?? 0 };
+    });
+
+  return rankSettlements(players, eliminated, settlements);
+}
+
+function rankSettlements(
+  players: Account[],
+  eliminated: Set<string>,
+  activeSettlements: Settlement[]
+): Settlement[] {
+
   const sorted = [...activeSettlements].sort((a, b) => b.netWorth - a.netWorth);
 
   const rankedActive: Array<typeof sorted[number] & { rank: number }> = [];
@@ -142,7 +197,7 @@ export function buildFinalTally(
     if (eliminated.has(p.id)) {
       return {
         playerId: p.id,
-        mode,
+        mode: activeSettlements[0]?.mode ?? 'itemized',
         valuation: 0,
         cash: 0,
         assetTotal: 0,

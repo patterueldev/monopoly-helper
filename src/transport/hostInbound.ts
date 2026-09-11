@@ -19,6 +19,8 @@ export interface HandleInboundContext {
   eventsAfter: (sinceSeq: number) => GameEvent[];
 }
 
+const HOST_ONLY_INTENTS = new Set(['settlement.started', 'settlement.dismissed', 'game.ended']);
+
 export type InboundOutcome =
   /** Send `message` to the socket that sent the inbound message, only. */
   | { action: 'reply'; message: WireMessage }
@@ -37,6 +39,9 @@ export function handleInbound(message: WireMessage, ctx: HandleInboundContext): 
       return { action: 'reply', message: { kind: 'welcome', protocolVersion: PROTOCOL_VERSION, gameId: ctx.gameId, events: ctx.eventsAfter(message.sinceSeq) } };
     }
     case 'intent': {
+      if (HOST_ONLY_INTENTS.has(message.intent.type)) {
+        return { action: 'reply', message: { kind: 'reject', intentId: message.intent.intentId, reason: 'Only the Host can perform this action' } };
+      }
       const result = ctx.dispatch(message.intent);
       if (!result.ok) return { action: 'reply', message: { kind: 'reject', intentId: message.intent.intentId, reason: result.error } };
       if (result.value.duplicate) {
