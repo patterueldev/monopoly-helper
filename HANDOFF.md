@@ -52,15 +52,16 @@ single-device "banker" app).
      via `eas build --local` (0 Expo cloud minutes), uploads the artifact, and
      publishes to GitHub Releases. Ignores doc-only (`*.md`) commits on push.
    - Configured with `concurrency: { group: ..., cancel-in-progress: true }` so that rapid merges cancel obsolete intermediate builds and only the latest commit builds fully.
-   - Verified live with Release `Android Preview #7`.
-8. **Local iOS Build & Direct TestFlight Submission** (`build-ios.yml`, PR #17, #22, #23, Issue #24) —
+   - Verified live with Release **Android Preview #14**.
+8. **Local iOS Build & Direct TestFlight Submission** (`build-ios.yml`, PR #17, #22, #23, #34, #35, Issue #24, #26) —
    - Compiles `.ipa` locally on `macos-latest` GitHub runner (0 Expo cloud minutes).
-   - Configured with `ascAppId: "6811088179"` in `eas.json` and `concurrency: { cancel-in-progress: true }`.
-   - Supports local signing and direct TestFlight upload from the runner using App Store Connect API Key secrets (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY`).
-   - Triggered on manual dispatch (`workflow_dispatch`), remaining idle until Apple Developer credentials are added.
+   - Injects App Store Connect API Key (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY`) into runner keychain.
+   - Uploads directly to TestFlight from runner via Apple's native `xcrun altool --upload-app` (0 Expo cloud submit minutes).
+   - Configured with `ITSAppUsesNonExemptEncryption: false` in `app.json` and `ascAppId: "6811088179"` in `eas.json`.
+   - Verified live on TestFlight via GitHub Actions Run **#34625467295**!
 
-9. **Multiplayer Lobby, Zero-Config LAN Discovery & Robust Socket Lifecycle** (PR #20, #28) —
-   - **Host Profile & Setup**: Host can enter/confirm their player name and token color before launching the room. Live lobby view at `app/host.tsx` waits for players to join over Wi-Fi (phone-per-player) and enables "Start Game" once 2+ players are present.
+9. **Multiplayer Lobby, Zero-Config LAN Discovery & Robust Socket Lifecycle** (PR #20, #28, Issues #29, #30, #31) —
+   - **Host Profile & Setup**: Host enters/confirms their player name and token color before launching the room. Live lobby view at `app/host.tsx` waits for players to join over Wi-Fi (phone-per-player only) and enables "Start Game" once 2+ players are present.
    - **Socket Teardown & EADDRINUSE Fix**: Defensive cleanup in `HostTransport.listen()`, `connectionStore.hostGame()`, and `useHostViewModel` unmount prevents port collisions when backing out and re-hosting.
    - **Subnet TCP Discovery**: Zero-config Wi-Fi table discovery via fast parallel subnet probing (`discovery.ts`, `discoveryLogic.ts`) over port 51837. Players tapping "Join Game" automatically see active nearby tables with host avatar, name, and room count, with a 1-tap "Join Table" action (and collapsible manual IP fallback).
 
@@ -99,14 +100,29 @@ single-device "banker" app).
 - **Releases**: Download the latest installable Android APK from:
   `https://github.com/patterueldev/monopoly-helper/releases`
 
+## How to Pick Up & Fix Issues (AI Guide)
+
+1. **Check open issues**: Run `gh issue list` or check the issue number provided by the user.
+2. **Branching**: Direct push to `main` is blocked. Create a feature branch: `git checkout -b <feat|fix|chore>/<issue-number>-<short-description>`.
+3. **Architectural boundaries**:
+   - Never import store/transport/react in `src/ledger/`.
+   - Keep business logic in ViewModels (`src/viewmodels/` or `src/store/`), keeping `app/*.tsx` lean.
+   - Keep files under 500 lines.
+4. **Validation**: Run `npm test`, `npm run typecheck`, `npm run lint`. Ensure all 87+ tests pass.
+5. **Pull Request**: Push branch, open PR via `gh pr create --title "..." --body "Closes #<id>"`.
+6. **Merge**: Once checks pass, merge with `gh pr merge --squash --delete-branch`.
+
+## Open Backlog Tracking
+
+- 📌 **Issue #32**: Sideloaded APK installation compatibility for Android 12 (minSdkVersion 24 = Android 7.0+ supported; signature mismatch resolution documented in README).
+- 📌 **Issue #33**: Distribution: Support installation on Samsung devices with Auto Blocker (Documented temporary workaround; track Google Play Console Internal Testing pipeline).
+
 ## Next steps & verification
 
-- **Manual on-device testing**: Download the APK from the latest GitHub Release
-  onto physical Android devices and verify:
+- **Manual on-device testing**: Download the APK from the latest GitHub Release or iOS build from TestFlight onto physical devices and verify:
   1. Profile persistence across app restarts.
   2. 1-Tap Host Game creation and live lobby player list.
   3. Zero-config LAN table detection and 1-tap "Join Table" from nearby devices.
   4. Joining with a conflicting token color and selecting an alternative available color.
   5. Turn advancement and rent transfer advisory actions.
   6. Fast vs. Itemized settlement calculations and final winner tally.
-- **iOS Apple Developer Account Setup (Issue #26)**: When ready to produce and submit iOS builds to TestFlight, follow the checklist in [#26](https://github.com/patterueldev/monopoly-helper/issues/26) to add `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_PRIVATE_KEY` to GitHub Secrets and dispatch the `build-ios.yml` workflow.
