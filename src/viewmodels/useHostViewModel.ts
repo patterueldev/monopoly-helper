@@ -20,6 +20,9 @@ export function useHostViewModel() {
   const dispatch = useGameStore((s) => s.dispatch);
   const players = Object.values(accounts).filter((a) => a.kind === 'player');
 
+  const usedColors = new Set(players.map((p) => p.color));
+  const availableColors = PLAYER_PALETTE.filter((c) => !usedColors.has(c));
+
   const [ip, setIp] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,11 +49,13 @@ export function useHostViewModel() {
     const trimmed = name.trim();
     if (!trimmed) return { ok: false as const, error: 'Name cannot be empty' };
     if (players.length >= 8) return { ok: false as const, error: 'Maximum 8 players reached' };
+    if (players.some((p) => p.name.trim().toLowerCase() === trimmed.toLowerCase())) {
+      return { ok: false as const, error: 'A player with this name already exists' };
+    }
 
-    const usedColors = new Set(players.map((p) => p.color));
     let chosenColor = color;
     if (!chosenColor || usedColors.has(chosenColor)) {
-      chosenColor = PLAYER_PALETTE.find((c) => !usedColors.has(c)) ?? PLAYER_PALETTE[players.length % PLAYER_PALETTE.length];
+      chosenColor = availableColors[0] ?? PLAYER_PALETTE[players.length % PLAYER_PALETTE.length];
     }
 
     const newAccount: Account = {
@@ -72,16 +77,33 @@ export function useHostViewModel() {
     return result;
   };
 
+  const updatePlayerColor = (playerId: string, newColor: string) => {
+    const player = players.find((p) => p.id === playerId);
+    if (!player) return { ok: false as const, error: 'Player not found' };
+    if (usedColors.has(newColor) && player.color !== newColor) {
+      return { ok: false as const, error: 'Color already taken' };
+    }
+    return dispatch({
+      type: 'player.renamed',
+      actorId: 'bank',
+      intentId: `color-${Date.now()}-${playerId}`,
+      payload: { accountId: playerId, name: player.name, color: newColor },
+    });
+  };
+
   return {
     ip,
     port: DEFAULT_PORT,
     status,
     peerCount,
     players,
+    availableColors,
     canStartGame: players.length >= 2,
     error: lastError,
     isListening: status === 'listening',
     addLocalPlayer,
+    updatePlayerColor,
     stopHosting: leaveSession,
   };
 }
+

@@ -56,9 +56,14 @@ single-device "banker" app).
    locally on `macos-latest` on manual dispatch (`workflow_dispatch` only).
    Kept idle until Apple Developer credentials/team accounts are configured.
 
-9. **1-Tap Multiplayer Lobby & Zero-Config LAN Discovery** (PR #19) —
+9. **1-Tap Multiplayer Lobby & Zero-Config LAN Discovery** (PR #20) —
    - **1-Tap Host Lobby**: Host taps "Host Game" from the home screen and immediately launches their room with their profile + Bank without having to manually pre-populate player names. Live lobby view at `app/host.tsx` waits for players to join over Wi-Fi, supports adding offline players without phones, and enables "Start Game" once 2+ players are present.
    - **Subnet TCP Discovery**: Zero-config Wi-Fi table discovery via fast parallel subnet probing (`discovery.ts`, `discoveryLogic.ts`) over port 51837. Players tapping "Join Game" automatically see active nearby tables with host avatar, name, and room count, with a 1-tap "Join Table" action (and collapsible manual IP fallback).
+
+10. **Color Conflict Prevention & Interactive Alternative Color Selection** (PR #21) —
+   - **Join-time Conflict Resolution**: When a player joins a table where their preferred color is already taken by the host or an earlier participant, the app presents an interactive **Color Selection Card** showing who holds the color and allows them to pick from remaining available colors before entering the table.
+   - **Host Lobby Color Swatches**: Host can select an available color for offline players and tap any player token in the lobby to cycle/change to an available color before starting.
+   - **Pass & Play Collision Guard**: Guaranteed conflict-free auto-assignment of unused colors across all single-device players.
 
 ## Working conventions established this project
 
@@ -77,7 +82,7 @@ single-device "banker" app).
 
 ## Running it
 
-- `npm test` — Vitest, pure-logic test suite (80 tests across 11 suites).
+- `npm test` — Vitest, pure-logic test suite (87 tests across 12 suites).
 - `npm run typecheck`, `npm run lint` — both clean.
 - **This app cannot run in Expo Go** — `react-native-tcp-socket` is a native
   module. Use the automated APK from GitHub Releases or run a local dev build
@@ -97,7 +102,8 @@ single-device "banker" app).
   1. Profile persistence across app restarts.
   2. 1-Tap Host Game creation and live lobby player list.
   3. Zero-config LAN table detection and 1-tap "Join Table" from nearby devices.
-  4. Turn advancement and rent transfer advisory actions.
-  5. Fast vs. Itemized settlement calculations and final winner tally.
+  4. Joining with a conflicting token color and selecting an alternative available color.
+  5. Turn advancement and rent transfer advisory actions.
+  6. Fast vs. Itemized settlement calculations and final winner tally.
 - **iOS Apple Developer Account Setup**: When ready to produce iOS builds,
   configure credentials via `eas credentials` and run the `build-ios.yml` workflow.

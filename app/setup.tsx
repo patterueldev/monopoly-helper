@@ -14,12 +14,19 @@ export default function Setup() {
   const [names, setNames] = useState<string[]>(() => [profile?.name ?? '', '']);
   const createGame = useGameStore((x) => x.createGame);
 
+  const p1Color = profile?.color ?? PLAYER_PALETTE[0];
+  const remainingPalette = PLAYER_PALETTE.filter((c) => c !== p1Color);
+  const getPlayerColor = (index: number) => {
+    if (index === 0) return p1Color;
+    return remainingPalette[(index - 1) % remainingPalette.length];
+  };
+
   const start = () => {
     const validNames = names.map((n) => n.trim()).filter(Boolean);
     if (validNames.length < 2) return;
 
     // Persist player 1 as this device's profile
-    saveProfile({ name: validNames[0], color: profile?.color ?? PLAYER_PALETTE[0] });
+    saveProfile({ name: validNames[0], color: p1Color });
 
     const bank: Account = {
       id: 'bank',
@@ -35,7 +42,7 @@ export default function Setup() {
         id: `p${i + 1}`,
         kind: 'player' as const,
         name,
-        color: (i === 0 && profile?.color) ? profile.color : PLAYER_PALETTE[i % PLAYER_PALETTE.length],
+        color: getPlayerColor(i),
         unlimited: false,
         assets: [],
       })),
@@ -61,7 +68,7 @@ export default function Setup() {
                   width: 14,
                   height: 14,
                   borderRadius: 7,
-                  backgroundColor: (i === 0 && profile?.color) ? profile.color : PLAYER_PALETTE[i % PLAYER_PALETTE.length],
+                  backgroundColor: getPlayerColor(i),
                 }}
               />
               <TextInput
