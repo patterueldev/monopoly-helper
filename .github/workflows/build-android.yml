@@ -1,0 +1,58 @@
+name: Build & Release Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create GitHub Releases
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Test & typecheck
+        run: npm test && npm run typecheck
+
+      - name: Setup Expo / EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build APK (EAS cloud)
+        id: eas
+        run: |
+          OUTPUT=$(eas build \
+            --platform android \
+            --profile preview \
+            --non-interactive \
+            --json \
+            --wait)
+          APK_URL=$(echo "$OUTPUT" | jq -r '.[0].artifacts.buildUrl')
+          echo "apk_url=$APK_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Download APK
+        run: curl -fL "${{ steps.eas.outputs.apk_url }}" -o monopoly-banker-preview.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "Android Preview #${{ github.run_number }}"
+          body: |
+            Automated Android APK build from commit ${{ github.sha }}.
+            Download and sideload `monopoly-banker-preview.apk` on your Android device.
+          files: monopoly-banker-preview.apk
+          make_latest: true
