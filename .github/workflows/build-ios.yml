@@ -2,6 +2,20 @@ name: Build & Release iOS (Local, On-Demand)
 
 on:
   workflow_dispatch:
+    inputs:
+      build_profile:
+        description: 'Build profile (production or preview)'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - preview
+      upload_to_testflight:
+        description: 'Upload compiled IPA to Apple TestFlight directly from runner'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write # needed to create or update GitHub Releases
@@ -11,6 +25,9 @@ jobs:
     runs-on: macos-latest
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,6 +53,24 @@ jobs:
       - name: Test & typecheck
         run: npm test && npm run typecheck
 
+      - name: Setup App Store Connect API Key (if provided)
+        id: asc-key-setup
+        run: |
+          if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_PRIVATE_KEY" ]; then
+            echo "Configuring App Store Connect API Key for local signing and TestFlight submission..."
+            mkdir -p ~/.appstoreconnect/private_keys
+            KEY_FILE="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+            echo "$ASC_PRIVATE_KEY" > "$KEY_FILE"
+            chmod 600 "$KEY_FILE"
+            echo "EXPO_ASC_API_KEY_ID=$ASC_KEY_ID" >> $GITHUB_ENV
+            echo "EXPO_ASC_ISSUER_ID=$ASC_ISSUER_ID" >> $GITHUB_ENV
+            echo "EXPO_ASC_API_KEY_PATH=$KEY_FILE" >> $GITHUB_ENV
+            echo "has_asc_key=true" >> $GITHUB_OUTPUT
+          else
+            echo "No App Store Connect API Key provided in secrets. Continuing with local build..."
+            echo "has_asc_key=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Expo / EAS
         uses: expo/expo-github-action@v8
         with:
@@ -45,26 +80,44 @@ jobs:
 
       - name: Build iOS IPA (Local runner)
         run: |
+          PROFILE="${{ inputs.build_profile || 'production' }}"
+          echo "Building iOS IPA locally on runner using profile: $PROFILE"
           eas build \
             --platform ios \
-            --profile preview \
+            --profile "$PROFILE" \
             --local \
             --non-interactive \
-            --output=monopoly-banker-preview.ipa
+            --output=monopoly-banker-ios.ipa
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: monopoly-banker-ios-ipa
-          path: monopoly-banker-preview.ipa
+          path: monopoly-banker-ios.ipa
           retention-days: 14
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-ios-${{ github.run_number }}
-          name: "iOS Preview #${{ github.run_number }}"
+          name: "iOS Build #${{ github.run_number }}"
           body: |
             Automated iOS IPA build from commit ${{ github.sha }} (compiled locally on macOS runner).
-            Install `monopoly-banker-preview.ipa` onto registered test devices.
-          files: monopoly-banker-preview.ipa
+            Profile: `${{ inputs.build_profile || 'production' }}`
+          files: monopoly-banker-ios.ipa
+
+      - name: Upload to TestFlight (Direct from runner)
+        if: ${{ inputs.upload_to_testflight && steps.asc-key-setup.outputs.has_asc_key == 'true' }}
+        run: |
+          echo "Submitting compiled IPA to TestFlight via App Store Connect API..."
+          eas submit \
+            --platform ios \
+            --path monopoly-banker-ios.ipa \
+            --profile production \
+            --non-interactive
+
+      - name: Cleanup temporary credentials
+        if: always()
+        run: |
+          rm -rf ~/.appstoreconnect/private_keys/AuthKey_*.p8 || true
+
