@@ -21,13 +21,12 @@ single-device "banker" app).
   ordering in Section 7** — read §11 for the real current scope. §12 is
   architecture/lint standards (SOLID, MVVM, 500-line file cap). §13 is Firebase
   (App Distribution only, not a backend).
-- **GitHub issues** (`patterueldev/monopoly-helper`) — one issue per remaining
-  MVP v2 build item, each with its own design notes. Check `gh issue list` for
-  current state; as of this writing:
-  - #3 Turn tracking + rent/jail events (advisory only)
-  - #4 Itemized settlement mode
-  - #5 Per-device player profile
-  - #6 CI: build + distribute Android builds via GitHub Actions
+- **GitHub issues** (`patterueldev/monopoly-helper`) — all initial MVP v2 issues are now implemented and closed:
+  - #2 LAN transport (PR #7)
+  - #3 Turn tracking + rent/jail events (PR #10)
+  - #4 Itemized settlement mode (PR #11)
+  - #5 Per-device player profile (PR #9)
+  - #6 CI: build + distribute Android builds via GitHub Actions (PR #12, #13, #14, #15)
 - **`main` branch requires PRs** — branch protection is on, direct pushes to
   `main` are rejected. Branch, PR, merge.
 
@@ -37,19 +36,21 @@ single-device "banker" app).
    `fold`/`applyEvent` into `GameState`. Zod-validated event schemas
    (`parseEvent`). Fully unit-tested (`reducer.test.ts`, `m1.test.ts`).
 2. **Single-device store + screens** (`src/store/gameStore.ts`, `app/*.tsx`) —
-   setup, table, pay, history, settlement (fast mode only — itemized is #4).
-3. **LAN transport** (PR #7, merged) — `react-native-tcp-socket` + NDJSON,
-   host/client roles, manual IP:port join. `gameStore` now takes an optional
-   `role` + injected `Transport`; host path is byte-for-byte the original local
-   `dispatch`, client path never assigns its own `seq`. New: `app/host.tsx`,
-   `app/join.tsx`, `src/transport/*`, `src/store/connectionStore.ts`,
-   `src/viewmodels/use{Host,Join}ViewModel.ts`. **Not yet manually verified on
-   real devices** — see the checklist in PR #7's description (multi-device
-   convergence, backgrounding/reconnect, Wi-Fi toggling, wrong-IP handling).
-4. **Firebase App Distribution wiring** (PR #1, merged) — `google-services.json`
-   (gitignored, present locally, not in git history), bundle ID unified to
-   `dev.patteruel.monopolybanker` everywhere. No Firestore/Auth/Analytics — see
-   `plan.md` §13 for the one remaining manual console step.
+   setup, table, pay, history, settlement (both fast and itemized modes).
+3. **LAN transport** (PR #7) — `react-native-tcp-socket` + NDJSON, host/client
+   roles, manual IP:port join. `gameStore` takes role + injected `Transport`.
+4. **Per-device player profile** (PR #9, Issue #5) — `profileStore`,
+   `profilePersistence` (MMKV), custom color picker, persistent local identity.
+5. **Turn tracking + rent/jail events** (PR #10, Issue #3) — `turn.advanced`,
+   `player.jailed`, `player.released` events, Turn Card UI, jail toggles,
+   advisory rent helpers.
+6. **Itemized settlement mode** (PR #11, Issue #4) — `settlementCalculations.ts`,
+   `useSettlementViewModel.ts`, itemized property/houses/hotels/mortgage inputs,
+   real-time net worth and leaderboard ranking.
+7. **CI Android APK build & GitHub Release** (PR #12–#15, Issue #6) — GHA
+   workflow triggered on push to `main` or manual dispatch. Builds APK via EAS
+   cloud, downloads it, and creates a public GitHub Release with the APK
+   attached. No Firebase required.
 
 ## Working conventions established this project
 
@@ -57,50 +58,30 @@ single-device "banker" app).
   ESLint `no-restricted-imports` boundary rule blocking imports from
   `store/`, `transport/`, `app/`, `react`, `react-native` — it must stay pure.
   `src/store/` + `src/viewmodels/` are the ViewModel layer; `app/*.tsx` is the
-  View. New screens (`host.tsx`, `join.tsx`) got per-screen viewmodel hooks
-  from day one — the older screens (`table.tsx`, `pay.tsx`, etc.) still inline
-  business logic and are known debt, not a pattern to extend.
-- **500-line file cap** — `eslint.config.js` `max-lines` rule (`warn`, not
-  `error`, since the existing dense one-line-per-file style in older screens
-  makes a hard cap unreliable right now — see `plan.md` §12). Don't let new
-  files creep past it; split by responsibility (see how LAN transport split
-  `HostTransport.ts`/`hostInbound.ts` — socket adapter vs. pure decision logic
-  — specifically so the logic could be unit-tested without a native module).
-- **Never commit secrets.** `.gitignore` blocks `google-services.json`,
-  `GoogleService-Info.plist`, `.env*`, `*.pem`, `*.key`, `firebase-debug.log`.
-  If you ever see one of these staged, stop and ask before committing.
-- **Plan → execute pipeline for nontrivial features**: a high-effort planning
-  pass (produce a concrete file-by-file design, resolve open questions, no
-  code) followed by a separate execution pass that builds it, tests as it
-  goes, and opens a PR. Used for the LAN transport work (#2 → PR #7); worth
-  repeating for #3–#6 rather than freehanding a big feature in one pass.
-- **Verify, don't just trust a worker's self-report.** After PR #7's
-  `worker_done` claimed tests/lint/typecheck were clean, that was independently
-  re-run from a fresh checkout before merging. Do the same before merging
-  anything nontrivial.
+  View.
+- **500-line file cap** — `eslint.config.js` `max-lines` rule (`warn`). Don't let
+  new files creep past it.
+- **Never commit secrets.** `.gitignore` blocks sensitive files and keys.
+- **Plan → execute pipeline for nontrivial features**: high-effort planning pass
+  followed by execution pass and clean PR.
+- **Verify, don't just trust a worker's self-report.** Independently run test,
+  typecheck, and lint on `main` post-merge.
 
 ## Running it
 
-- `npm test` — Vitest, pure-logic only (ledger, store, wire protocol, transport
-  decision logic). Fast, no native modules needed.
-- `npm run typecheck`, `npm run lint` — should both be clean (lint's only
-  acceptable warning is a cosmetic Node ESM one from `eslint.config.js`, plus
-  possibly an unrelated `.expo/types/router.d.ts` warning).
+- `npm test` — Vitest, pure-logic test suite (73 tests across 10 suites).
+- `npm run typecheck`, `npm run lint` — both clean.
 - **This app cannot run in Expo Go** — `react-native-tcp-socket` is a native
-  module. Needs a dev-client build (`eas build --profile development` or
-  `preview`, per `eas.json`) installed on-device. `expo start` alone won't load
-  the transport code.
-- Fresh `npm install` may hit an `ERESOLVE` peer-dependency conflict (react/
-  react-dom/expo versions) unrelated to any of this project's own code — use
-  `npm install --legacy-peer-deps` if that happens.
-- `npm run distribute:android -- <path-to-apk>` — uploads a build to Firebase
-  App Distribution's `family` tester group (see `plan.md` §13 for the one-time
-  manual console step this depends on).
+  module. Use the automated APK from GitHub Releases or run a local dev build
+  via `eas build --profile development`.
+- Automated Android builds publish to GitHub Releases under:
+  `https://github.com/patterueldev/monopoly-helper/releases`
 
-## Suggested next step
+## Next steps & verification
 
-Pick up one of issues #3/#4/#5 (independent of each other, no new native deps,
-lowest risk) or #6 (CI build/distribution — now more useful since there's a
-real multiplayer feature to test builds of). Follow the plan → execute pattern
-above rather than jumping straight to code for anything bigger than a small
-fix.
+- **Manual on-device testing**: Download the APK from the latest GitHub Release
+  onto physical Android devices and verify:
+  1. Profile persistence across app restarts.
+  2. Host game creation + client join over local Wi-Fi.
+  3. Turn advancement and rent transfer advisory actions.
+  4. Fast vs. Itemized settlement calculations and final winner tally.
