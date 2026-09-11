@@ -7,7 +7,7 @@ export type TransferReason = { kind: 'go' | 'rent' | 'buy' | 'tax' | 'card' | 't
 export type SettlementMode = 'fast' | 'itemized';
 export interface SettlementRow { kind: 'property' | 'houses' | 'hotels' | 'mortgage'; value: number; quantity?: number; }
 export interface Settlement { playerId: string; mode: SettlementMode; rows?: SettlementRow[]; valuation: number; cash: number; assetTotal: number; netWorth: number; rank?: number; }
-export type EventType = 'game.started' | 'player.joined' | 'player.renamed' | 'transfer' | 'transfer.reversed' | 'player.eliminated' | 'game.ended';
+export type EventType = 'game.started' | 'player.joined' | 'player.renamed' | 'transfer' | 'transfer.reversed' | 'player.eliminated' | 'game.ended' | 'turn.advanced' | 'player.jailed' | 'player.released';
 export type Payload = {
   'game.started': { config: GameConfig; accounts: Account[] };
   'player.joined': { account: Account };
@@ -16,9 +16,12 @@ export type Payload = {
   'transfer.reversed': { targetSeq: number };
   'player.eliminated': { accountId: string; creditorId: string | null };
   'game.ended': { tally: Settlement[] };
+  'turn.advanced': { toAccountId: string };
+  'player.jailed': { accountId: string };
+  'player.released': { accountId: string };
 };
 export type GameEvent<T extends EventType = EventType> = { [K in T]: { seq: number; ts: number; actorId: string; intentId: string; type: K; payload: Payload[K] } }[T];
-export interface GameState { started: boolean; ended: boolean; config?: GameConfig; accounts: Record<string, Account>; balances: Record<string, number>; eliminated: Set<string>; reversed: Set<number>; events: GameEvent[]; tally?: Settlement[]; lastPayer?: string; invalid: boolean; }
+export interface GameState { started: boolean; ended: boolean; config?: GameConfig; accounts: Record<string, Account>; balances: Record<string, number>; eliminated: Set<string>; reversed: Set<number>; events: GameEvent[]; tally?: Settlement[]; lastPayer?: string; currentTurnAccountId?: string; jailed: Set<string>; invalid: boolean; }
 export const DEFAULT_CONFIG: GameConfig = { startingCash: 1500, goSalary: 200, doubleOnExactGo: false, freeParkingPot: false, bankerMode: true, currencySymbol: '$', quickAmounts: [50, 100, 200, 500] };
 const reason = z.discriminatedUnion('kind', [z.object({ kind: z.enum(['go','rent','buy','tax','card','trade']) }), z.object({ kind: z.literal('other'), note: z.string().optional() })]);
 export const accountSchema = z.object({ id: z.string().min(1), kind: z.enum(['player','bank','pot']), name: z.string().min(1), color: z.string().min(1), unlimited: z.boolean(), assets: z.array(z.unknown()) });
@@ -33,5 +36,8 @@ export const payloadSchemas = {
   'transfer.reversed': z.object({ targetSeq: z.number().int().nonnegative() }),
   'player.eliminated': z.object({ accountId: z.string(), creditorId: z.string().nullable() }),
   'game.ended': z.object({ tally: z.array(settlementSchema) }),
+  'turn.advanced': z.object({ toAccountId: z.string().min(1) }),
+  'player.jailed': z.object({ accountId: z.string().min(1) }),
+  'player.released': z.object({ accountId: z.string().min(1) }),
 } as const;
 export function parseEvent(input: unknown): GameEvent | null { if (!input || typeof input !== 'object') return null; const raw = input as any; if (!Object.prototype.hasOwnProperty.call(payloadSchemas, raw.type)) return null; const schema = payloadSchemas[raw.type as EventType]; const base = z.object({ seq: z.number().int().nonnegative(), ts: z.number().finite(), actorId: z.string(), intentId: z.string().min(1), type: z.string(), payload: schema }); const parsed = base.safeParse(input); return parsed.success ? parsed.data as GameEvent : null; }
