@@ -1,1 +1,2 @@
-export const colors={cream:'#FFF8E7',green:'#174A3A',ink:'#17221D',muted:'#66736B',red:'#B8433B',gold:'#E5A93D',white:'#FFFFFF',border:'#D6CBB4',purple:'#7357A8',blue:'#4B85B5',pink:'#C85C75',teal:'#3D9A8B',orange:'#D27D3F',lime:'#82A95B'};
+export const colors = { cream: '#FFF8E7', green: '#174A3A', ink: '#17221D', muted: '#66736B', red: '#B8433B', gold: '#E5A93D', white: '#FFFFFF', border: '#D6CBB4', purple: '#7357A8', blue: '#4B85B5', pink: '#C85C75', teal: '#3D9A8B', orange: '#D27D3F', lime: '#82A95B' };
+export const PLAYER_PALETTE = [colors.red, colors.blue, colors.purple, colors.teal, colors.orange, colors.pink, colors.lime, colors.gold] as const;
