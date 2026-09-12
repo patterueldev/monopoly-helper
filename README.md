@@ -133,7 +133,7 @@ Both Android and iOS builds are fully automated via GitHub Actions using **local
 
 ### Release version gate (`.github/workflows/version-check.yml`)
 - Runs on every pull request targeting `main`.
-- A version bump is **required** when the PR touches app code or build config (`app/`, `src/`, `assets/`, `app.json`, `package.json`, `eas.json`, toolchain configs, `google-services.json`).
+- A version bump is **required** when the PR touches app code or build config (`app/`, `src/`, `assets/`, `app.json`, `package.json`, `eas.json`, toolchain configs).
 - Docs-only / CI-only PRs may merge without a bump; a bump is still accepted if present.
 - When required, `app.json` (`expo.version`) and `package.json` (`version`) must match and be strictly higher than the version on `main`.
 - `.github/workflows/tag-version.yml` creates an immutable `vX.Y.Z` git tag after a merge to `main` (or skips if the version is unchanged).
@@ -142,6 +142,7 @@ Both Android and iOS builds are fully automated via GitHub Actions using **local
 - Runs on every push to `main` and detects whether `app.json`'s version changed.
 - When a version bump merged, it calls **both** build workflows in parallel — never cancels an in-flight release:
   - Android → installable APK published to **GitHub Releases**.
+  - The same Android APK is also uploaded to **Firebase App Distribution** for the `family` tester group.
   - iOS → signed production IPA uploaded directly to **Apple TestFlight** (no GitHub Release; the IPA is kept as a 14-day workflow artifact for debugging).
 - Merges without a version bump build nothing.
 - Both build workflows (`.github/workflows/build-android.yml`, `.github/workflows/build-ios.yml`) are also manually dispatchable; iOS accepts a `production`/`preview` profile and an optional TestFlight upload flag.
@@ -153,6 +154,22 @@ The iOS workflow compiles and signs locally on `macos-latest` using App Store Co
 - `ASC_PRIVATE_KEY`: App Store Connect AuthKey (`.p8` private key)
 - Uploads to **Apple TestFlight** from the runner using `xcrun altool --upload-app`.
 - **Download**: [Latest Android APK Releases](https://github.com/patterueldev/monopoly-helper/releases). iOS builds go to TestFlight only — no iOS GitHub Releases.
+
+### Firebase App Distribution
+The Android release workflow publishes the same signed APK to Firebase App Distribution and the GitHub Releases page. Firebase uses the existing Android app in project `randomprojects-198e3` and the `family` tester group.
+
+The one-time Firebase setup is:
+- Open **App Distribution → Monopoly Banker → Get started** in the Firebase console.
+- Create the `family` group and add tester email addresses.
+- In Google Cloud project `randomprojects-198e3`, create the dedicated service account
+  `github-actions-firebase@randomprojects-198e3.iam.gserviceaccount.com`, grant it
+  `roles/firebaseappdistro.admin`, and allow only the `patterueldev/monopoly-helper`
+  repository's `main` branch to impersonate it through a GitHub OIDC Workload Identity
+  provider named `monopoly-helper` in pool `github`.
+- The workflow expects provider resource
+  `projects/212760278503/locations/global/workloadIdentityPools/github/providers/monopoly-helper`.
+
+GitHub Actions authenticates to Google Cloud without a Firebase token or service-account key. The local `google-services.json` file is ignored and is not needed for App Distribution; it is only relevant if the app later adds Firebase Android SDK features such as FCM.
 
 ---
 

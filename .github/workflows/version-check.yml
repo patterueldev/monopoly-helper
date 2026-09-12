@@ -45,7 +45,7 @@ jobs:
           // A version bump is required only when the PR touches code or build
           // config. Docs-only/CI-only PRs may merge without a bump.
           const codePattern =
-            /^(app\/|src\/|assets\/|app\.json$|package\.json$|eas\.json$|tsconfig\.json$|eslint\.config\.|babel\.config\.|metro\.config\.|index\.|google-services\.json$)/;
+            /^(app\/|src\/|assets\/|app\.json$|package\.json$|eas\.json$|tsconfig\.json$|eslint\.config\.|babel\.config\.|metro\.config\.|index\.)/;
           const changedFiles = execFileSync('git', ['diff', '--name-only', `${process.env.BASE_SHA}...HEAD`], {
             encoding: 'utf8',
           })
