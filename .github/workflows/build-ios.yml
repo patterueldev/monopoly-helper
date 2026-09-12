@@ -1,6 +1,18 @@
 name: Build & Release iOS (Local, On-Demand)
 
 on:
+  workflow_call:
+    inputs:
+      build_profile:
+        description: 'Build profile (production or preview)'
+        required: false
+        default: 'production'
+        type: string
+      upload_to_testflight:
+        description: 'Upload compiled IPA to Apple TestFlight directly from runner'
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       build_profile:
@@ -17,12 +29,8 @@ on:
         default: false
         type: boolean
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
-  contents: write # needed to create or update GitHub Releases
+  contents: read # iOS artifacts ship to TestFlight; no GitHub Release is created
 
 jobs:
   build-ios:
@@ -100,16 +108,6 @@ jobs:
           name: monopoly-banker-ios-ipa
           path: monopoly-banker-ios.ipa
           retention-days: 14
-
-      - name: Create or Update GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: build-ios-${{ github.run_number }}
-          name: "iOS Build #${{ github.run_number }}"
-          body: |
-            Automated iOS IPA build from commit ${{ github.sha }} (compiled locally on macOS runner).
-            Profile: `${{ inputs.build_profile || 'production' }}`
-          files: monopoly-banker-ios.ipa
 
       - name: Upload to TestFlight (Direct from runner via Apple altool)
         if: ${{ inputs.upload_to_testflight && steps.asc-key-setup.outputs.has_asc_key == 'true' }}

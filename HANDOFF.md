@@ -48,15 +48,19 @@ single-device "banker" app).
    `useSettlementViewModel.ts`, itemized property/houses/hotels/mortgage inputs,
    real-time net worth and leaderboard ranking.
 7. **CI Android APK build & GitHub Release** (PR #12–#15, #17, #18, Issue #6, #24) —
-   - GHA workflow (`build-android.yml`) compiles `.apk` locally on `ubuntu-latest`
-     via `eas build --local` (0 Expo cloud minutes), uploads the artifact, and
-     publishes to GitHub Releases. Ignores doc-only (`*.md`) commits on push.
-   - Configured with `concurrency: { group: ..., cancel-in-progress: true }` so that rapid merges cancel obsolete intermediate builds and only the latest commit builds fully.
+   - GHA workflow (`build-android.yml`, reusable via `release.yml`) compiles `.apk`
+     locally on `ubuntu-latest` via `eas build --local` (0 Expo cloud minutes),
+     uploads the artifact, and publishes to GitHub Releases. Builds run only when
+     a version bump merges to `main` — never on doc-only pushes.
+   - `release.yml` uses `concurrency: { group: release-..., cancel-in-progress: false }`
+     so an in-flight release is never cancelled by a later merge.
    - Verified live with Release **Android Preview #14**.
 8. **Local iOS Build & Direct TestFlight Submission** (`build-ios.yml`, PR #17, #22, #23, #34, #35, Issue #24, #26) —
    - Compiles `.ipa` locally on `macos-latest` GitHub runner (0 Expo cloud minutes).
    - Injects App Store Connect API Key (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY`) into runner keychain.
-   - Uploads directly to TestFlight from runner via Apple's native `xcrun altool --upload-app` (0 Expo cloud submit minutes).
+   - Uploads directly to TestFlight from runner via Apple's native `xcrun altool --upload-app` (0 Expo cloud submit minutes). No iOS GitHub Releases (historical `build-ios-*` releases deleted); the IPA is kept as a 14-day workflow artifact.
+   - `release.yml` calls both `build-ios.yml` and `build-android.yml` in parallel on every version bump merged to `main`; both workflows stay manually dispatchable.
+   - PRs to `main` are gated by `ci.yml` (`npm test`, `typecheck`, `lint`) and `version-check.yml` (version bump required only for app/src/config changes).
    - Configured with `ITSAppUsesNonExemptEncryption: false` in `app.json` and `ascAppId: "6811088179"` in `eas.json`.
    - Verified live on TestFlight via GitHub Actions Run **#34625467295**!
 
