@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Account } from '../ledger/types';
 import { KeyValueStorage, MemoryStorage, productionStorage } from './persistence';
-import { loadProfile, saveProfile, PlayerProfile } from './profilePersistence';
+import { loadProfile, saveProfile, loadSoundEnabled, saveSoundEnabled, PlayerProfile } from './profilePersistence';
 
 declare const process: { env: Record<string, string | undefined> };
 const defaultStorage = (): KeyValueStorage =>
@@ -9,13 +9,16 @@ const defaultStorage = (): KeyValueStorage =>
 
 export interface ProfileStore {
   profile: PlayerProfile | null;
+  soundEnabled: boolean;
   saveProfile: (profile: PlayerProfile) => boolean;
+  setSoundEnabled: (enabled: boolean) => void;
   findMyAccount: (accounts: Record<string, Account>) => Account | undefined;
 }
 
 export const createProfileStore = (storage: KeyValueStorage = defaultStorage()) => {
   return create<ProfileStore>((set, get) => ({
     profile: loadProfile(storage),
+    soundEnabled: loadSoundEnabled(storage),
 
     saveProfile: (profile: PlayerProfile) => {
       const ok = saveProfile(storage, profile);
@@ -23,6 +26,10 @@ export const createProfileStore = (storage: KeyValueStorage = defaultStorage()) 
         set({ profile: loadProfile(storage) });
       }
       return ok;
+    },
+
+    setSoundEnabled: (enabled: boolean) => {
+      if (saveSoundEnabled(storage, enabled)) set({ soundEnabled: enabled });
     },
 
     findMyAccount: (accounts: Record<string, Account>) => {
