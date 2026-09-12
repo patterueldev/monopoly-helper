@@ -19,7 +19,15 @@ export interface HandleInboundContext {
   eventsAfter: (sinceSeq: number) => GameEvent[];
 }
 
-const HOST_ONLY_INTENTS = new Set(['settlement.started', 'settlement.dismissed', 'game.ended']);
+const HOST_ONLY_INTENT_TYPES = new Set(['settlement.started', 'settlement.dismissed', 'game.ended', 'player.jailed', 'player.released']);
+
+/** Banker-only intents a client may never submit: settlement controls, game end,
+ * jail/release, and any transfer issued by the Bank (e.g. Pass GO). Local host
+ * dispatch is separately authorized by the ledger's isBanker check. */
+export function isBankerOnlyIntent(intent: Intent): boolean {
+  if (HOST_ONLY_INTENT_TYPES.has(intent.type)) return true;
+  return intent.type === 'transfer' && intent.payload.from === 'bank';
+}
 
 export type InboundOutcome =
   /** Send `message` to the socket that sent the inbound message, only. */
@@ -39,7 +47,7 @@ export function handleInbound(message: WireMessage, ctx: HandleInboundContext): 
       return { action: 'reply', message: { kind: 'welcome', protocolVersion: PROTOCOL_VERSION, gameId: ctx.gameId, events: ctx.eventsAfter(message.sinceSeq) } };
     }
     case 'intent': {
-      if (HOST_ONLY_INTENTS.has(message.intent.type)) {
+      if (isBankerOnlyIntent(message.intent)) {
         return { action: 'reply', message: { kind: 'reject', intentId: message.intent.intentId, reason: 'Only the Host can perform this action' } };
       }
       const result = ctx.dispatch(message.intent);

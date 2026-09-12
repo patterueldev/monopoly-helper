@@ -39,3 +39,10 @@ describe('M1 deterministic replay', () => {
     const one = fold(events); const two = fold(events); expect(one.balances).toEqual({ bank: 0, a: expectedA, b: expectedB }); expect(two).toEqual(one);
   });
 });
+
+describe('game config defaults (T-004)', () => {
+  it('offers small denominations in the default quick amounts', () => {
+    for (const n of [1, 10, 20]) expect(DEFAULT_CONFIG.quickAmounts).toContain(n);
+    expect(DEFAULT_CONFIG.quickAmounts.length).toBeGreaterThan(4);
+  });
+});

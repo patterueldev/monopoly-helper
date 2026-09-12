@@ -2,7 +2,7 @@
   "expo": {
     "name": "Monopoly Banker",
     "slug": "monopoly-helper",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "scheme": "monopolybanker",
     "userInterfaceStyle": "automatic",

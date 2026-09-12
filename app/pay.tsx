@@ -15,35 +15,44 @@ import {
 } from 'react-native';
 import { useGameStore } from '../src/store/gameStore';
 import { useProfileStore } from '../src/store/profileStore';
+import { useConnectionStore } from '../src/store/connectionStore';
+import { bankerAccountId } from '../src/ledger/selectors';
 import { colors } from '../src/theme';
 import { buildTransfer } from '../src/ledger/intents';
 import { TransferReason } from '../src/ledger/types';
 
-type ReasonKind = 'rent' | 'trade' | 'tax' | 'buy' | 'card' | 'go' | 'station' | 'other';
+type ReasonKind = 'rent' | 'trade' | 'buy' | 'station' | 'other';
 
 const REASONS: Array<{ kind: ReasonKind; label: string }> = [
   { kind: 'rent', label: 'Rent' },
   { kind: 'trade', label: 'Trade' },
-  { kind: 'tax', label: 'Tax' },
   { kind: 'buy', label: 'Buy' },
   { kind: 'station', label: 'Station' },
-  { kind: 'card', label: 'Card' },
-  { kind: 'go', label: 'Pass GO' },
   { kind: 'other', label: 'Other' },
 ];
 
 export default function Pay() {
-  const { to: paramTo, reason: paramReason } = useLocalSearchParams<{ to?: string; reason?: string }>();
+  const { to: paramTo, reason: paramReason, from: paramFrom } = useLocalSearchParams<{ to?: string; reason?: string; from?: string }>();
   const state = useGameStore((x) => x.state);
   const dispatch = useGameStore((x) => x.dispatch);
   const findMyAccount = useProfileStore((x) => x.findMyAccount);
   const myAccount = findMyAccount(state.accounts);
+  const role = useConnectionStore((x) => x.role);
 
   const players = Object.values(state.accounts).filter((a) => a.kind === 'player' && !state.eliminated.has(a.id));
 
-  const initialTo = paramTo && paramTo !== myAccount?.id
-    ? paramTo
-    : (players.find((p) => p.id !== myAccount?.id)?.id ?? 'bank');
+  // Banker mode: the Host pays a player from the Bank (T-003). Only the Host
+  // device acting as the Host's player account may use it; everyone else falls
+  // back to a regular player-initiated payment.
+  const bankerId = bankerAccountId(state);
+  const isBankerMode = paramFrom === 'bank' && role === 'host' && !!bankerId;
+  const from = isBankerMode ? 'bank' : (myAccount?.id ?? '');
+
+  const initialTo = isBankerMode
+    ? (paramTo && players.some((p) => p.id === paramTo) ? paramTo : (players[0]?.id ?? ''))
+    : (paramTo && paramTo !== myAccount?.id
+      ? paramTo
+      : (players.find((p) => p.id !== myAccount?.id)?.id ?? 'bank'));
   const initialReason: ReasonKind = REASONS.some((r) => r.kind === paramReason) ? (paramReason as ReasonKind) : 'other';
 
   const [to, setTo] = useState(initialTo);
@@ -68,15 +77,14 @@ export default function Pay() {
 
   const submit = () => {
     const value = Number(amount);
-    const from = myAccount?.id ?? '';
     if (!from || !to || !Number.isSafeInteger(value) || value <= 0 || from === to) return;
     const transferReason: TransferReason = reason === 'other' ? { kind: 'other' } : { kind: reason };
     const intent = buildTransfer(state, from, to, value, transferReason, state.events.length);
-    const result = dispatch({ ...intent, intentId: `payment-${Date.now()}-${from}-${to}-${value}` });
+    const result = dispatch({ ...intent, actorId: isBankerMode ? bankerId! : from, intentId: `payment-${Date.now()}-${from}-${to}-${value}` });
     if (result.ok) router.back();
   };
 
-  const options = [...players, { id: 'bank', name: 'Bank' }];
+  const options = isBankerMode ? players : [...players, { id: 'bank', name: 'Bank' }];
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
@@ -87,12 +95,12 @@ export default function Pay() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         >
-          <Text style={{ fontSize: 34, fontWeight: '900', color: colors.green }}>Pay</Text>
+          <Text style={{ fontSize: 34, fontWeight: '900', color: colors.green }}>{isBankerMode ? 'Pay from Bank' : 'Pay'}</Text>
 
           <Text style={{ fontWeight: '800', color: colors.muted, fontSize: 16 }}>To</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {options
-              .filter((p) => p.id !== myAccount?.id)
+              .filter((p) => p.id !== from)
               .map((p) => {
                 const isSelected = to === p.id;
                 return (
@@ -177,7 +185,7 @@ export default function Pay() {
           </View>
 
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
-            {(state.config?.quickAmounts ?? [50, 100, 200, 500]).map((n) => (
+            {(state.config?.quickAmounts ?? [1, 10, 20, 50, 100, 200, 500]).map((n) => (
               <Pressable
                 key={n}
                 onPress={() => changeAmount(Number(amount || 0) + n)}

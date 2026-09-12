@@ -26,6 +26,12 @@ export const defaultItemizedEntry = (): ItemizedPlayerEntry => ({
   mortgageEntries: [],
 });
 
+/** Auto-fill name for a newly added mortgage row; numbering follows the current
+ * row count and the name stays editable. */
+export function defaultMortgageName(existingCount: number): string {
+  return `Asset #${existingCount + 1}`;
+}
+
 export function parseNonNegativeInt(input: string | undefined): number {
   if (!input) return 0;
   const num = Math.floor(Number(input.trim()));
