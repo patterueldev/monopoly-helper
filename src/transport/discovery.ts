@@ -1,5 +1,7 @@
 import { DiscoveredHost, getSubnetIps, chunkArray, parseWelcomeResponse } from './discoveryLogic';
 import { DEFAULT_PORT, PROTOCOL_VERSION, decodeLine, encodeMessage } from './wireProtocol';
+import { log } from '../diagnostics/logBuffer';
+import { setLastSeenHosts } from '../diagnostics/lastSeen';
 
 export * from './discoveryLogic';
 
@@ -104,9 +106,12 @@ export async function scanLocalSubnet(options?: ScanOptions): Promise<Discovered
   try {
     const Network = require('expo-network');
     localIp = await Network.getIpAddressAsync();
-  } catch {}
+  } catch {
+    log('scan', 'warn', 'could not read local IP; scanning loopback only');
+  }
 
   const ips = getSubnetIps(localIp);
+  log('scan', 'info', `scanning ${ips.length} addresses on port ${port}`, localIp ? `from ${localIp}` : undefined);
   const chunks = chunkArray(ips, batchSize);
   const found: DiscoveredHost[] = [];
   const foundIps = new Set<string>();
@@ -118,6 +123,7 @@ export async function scanLocalSubnet(options?: ScanOptions): Promise<Discovered
         if (host && !foundIps.has(host.ip)) {
           foundIps.add(host.ip);
           found.push(host);
+          log('scan', 'info', `found table "${host.hostName}"`, `${host.ip}:${host.port} (${host.playerCount} players)`);
           options?.onHostFound?.(host);
         }
         return host;
@@ -125,5 +131,7 @@ export async function scanLocalSubnet(options?: ScanOptions): Promise<Discovered
     );
   }
 
+  log('scan', 'info', `scan finished: ${found.length} table${found.length === 1 ? '' : 's'} found`);
+  setLastSeenHosts(found.map((h) => ({ ip: h.ip, port: h.port, hostName: h.hostName, playerCount: h.playerCount })));
   return found;
 }

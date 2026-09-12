@@ -4,6 +4,7 @@ import { Intent } from '../ledger/intents';
 import { Transport } from './Transport';
 import { HandleInboundContext, handleInbound } from './hostInbound';
 import { DEFAULT_PORT, LineBuffer, decodeLine, encodeMessage } from './wireProtocol';
+import { log } from '../diagnostics/logBuffer';
 
 export type { DispatchOutcome, HandleInboundContext, InboundOutcome } from './hostInbound';
 export { handleInbound } from './hostInbound';
@@ -58,6 +59,7 @@ export class HostTransport implements Transport {
       let resolved = false;
       const server = TcpSocket.createServer(socket => this.onConnection(socket));
       server.on('error', (err: Error) => {
+        log('host', 'error', 'host server error', err?.message ?? 'unknown');
         if (!resolved) {
           reject(err);
         }
@@ -92,14 +94,15 @@ export class HostTransport implements Transport {
     const id = this.nextPeerId++;
     const peer: Peer = { socket, buffer: new LineBuffer(), lastPongAt: Date.now() };
     this.peers.set(id, peer);
+    log('host', 'info', `peer #${id} connected`, `${this.peers.size} total`);
 
     socket.on('data', (chunk: string | Buffer) => {
       const lines = peer.buffer.push(chunk.toString('utf8'));
       if (peer.buffer.oversized) { socket.destroy(); this.peers.delete(id); return; }
       for (const line of lines) this.handleLine(peer, socket, line);
     });
-    socket.on('close', () => this.peers.delete(id));
-    socket.on('error', () => this.peers.delete(id));
+    socket.on('close', () => { this.peers.delete(id); log('host', 'info', `peer #${id} disconnected`, `${this.peers.size} remaining`); });
+    socket.on('error', () => { this.peers.delete(id); log('host', 'warn', `peer #${id} errored`, `${this.peers.size} remaining`); });
   }
 
   private handleLine(peer: Peer, socket: TcpSocket.Socket, line: string) {

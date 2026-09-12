@@ -116,7 +116,7 @@ describe('jail status (advisory only)', () => {
     const s = fold([
       started(),
       makeEvent('player.jailed', { accountId: 'a' }, 'a', 1, 'jail-a'),
-      makeEvent('transfer', { from: 'a', to: 'b', amount: 200, reason: { kind: 'rent' } }, 'b', 2, 'rent-pay'),
+      makeEvent('transfer', { from: 'a', to: 'b', amount: 200, reason: { kind: 'rent' } }, 'a', 2, 'rent-pay'),
     ]);
     expect(s.invalid).toBe(false);
     expect(s.balances.a).toBe(1300);
@@ -164,9 +164,25 @@ describe('banker authority (Host as Banker)', () => {
     expect(s.balances.b).toBe(1400);
   });
 
-  it('rejects jailing or releasing by a non-banker', () => {
-    expect(fold([started(), makeEvent('player.jailed', { accountId: 'b' }, 'b', 1, 'jail-bad')]).invalid).toBe(true);
-    expect(fold([started(), makeEvent('player.jailed', { accountId: 'b' }, 'a', 1, 'jail-ok'), makeEvent('player.released', { accountId: 'b' }, 'b', 2, 'release-bad')]).invalid).toBe(true);
+  it('lets any player jail and release themselves', () => {
+    const s = fold([
+      started(),
+      makeEvent('player.jailed', { accountId: 'b' }, 'b', 1, 'jail-self-b'),
+      makeEvent('player.released', { accountId: 'b' }, 'b', 2, 'release-self-b'),
+    ]);
+    expect(s.invalid).toBe(false);
+    expect(isJailed(s, 'b')).toBe(false);
+  });
+
+  it('lets a player self-jail even when no host is set', () => {
+    const s = fold([unhosted(), makeEvent('player.jailed', { accountId: 'a' }, 'a', 1, 'jail-nohost-self')]);
+    expect(s.invalid).toBe(false);
+    expect(isJailed(s, 'a')).toBe(true);
+  });
+
+  it('rejects jailing or releasing another player as a non-banker', () => {
+    expect(fold([started(), makeEvent('player.jailed', { accountId: 'a' }, 'b', 1, 'jail-bad')]).invalid).toBe(true);
+    expect(fold([started(), makeEvent('player.jailed', { accountId: 'a' }, 'a', 1, 'jail-ok'), makeEvent('player.released', { accountId: 'a' }, 'b', 2, 'release-bad')]).invalid).toBe(true);
   });
 
   it('lets the Banker jail any player, including themselves', () => {
@@ -175,8 +191,8 @@ describe('banker authority (Host as Banker)', () => {
     expect(isJailed(s, 'a')).toBe(true);
   });
 
-  it('rejects jailing when no host is set', () => {
-    expect(fold([unhosted(), makeEvent('player.jailed', { accountId: 'a' }, 'a', 1, 'jail-nohost')]).invalid).toBe(true);
+  it('rejects jailing another player when no host is set', () => {
+    expect(fold([unhosted(), makeEvent('player.jailed', { accountId: 'b' }, 'a', 1, 'jail-nohost')]).invalid).toBe(true);
   });
 });
 
@@ -419,7 +435,24 @@ describe('payment requests (T-011/T-012)', () => {
     expect(applyEvent(fold([started(), req(1, 'b', 'r1', 'a', 'b', 100)]), resolve(2, 'a', 'r1', 'cancelled')).invalid).toBe(true);
   });
 
-  it('the Banker collects into the Bank; a non-banker cannot', () => {
+  it('the Banker collects into the Bank immediately, without approval', () => {
+    const s = fold([
+      started(),
+      makeEvent('transfer', { from: 'b', to: 'bank', amount: 200, reason: { kind: 'rent' } }, 'a', 1, 'collect-1'),
+    ]);
+    expect(s.invalid).toBe(false);
+    expect(s.balances.b).toBe(1300);
+    expect(s.events).toHaveLength(2);
+  });
+
+  it('rejects spending another player\u2019s money without banker authority', () => {
+    expect(fold([
+      started(),
+      makeEvent('transfer', { from: 'a', to: 'b', amount: 100, reason: { kind: 'rent' } }, 'b', 1, 'spend-other'),
+    ]).invalid).toBe(true);
+  });
+
+  it('the Banker can still request into the Bank with payer approval; a non-banker cannot', () => {
     const collected = fold([started(), req(1, 'a', 'tax', 'b', 'bank', 200), resolve(2, 'b', 'tax', 'paid')]);
     expect(collected.invalid).toBe(false);
     expect(collected.balances.b).toBe(1300);

@@ -3,11 +3,14 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors } from '../src/theme';
 import { DiscoveredHost } from '../src/transport/discovery';
+import { QrScannerModal } from '../src/components/QrScannerModal';
 import { useJoinViewModel } from '../src/viewmodels/useJoinViewModel';
 
 export default function Join() {
   const vm = useJoinViewModel();
   const [showManual, setShowManual] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [altColor, setAltColor] = useState<string | null>(null);
 
   // Sync default altColor when conflict occurs
@@ -26,6 +29,17 @@ export default function Join() {
     const result = await vm.connect();
     if (result.ok) {
       router.replace('/table');
+    }
+  };
+
+  const onScannedQr = async (text: string) => {
+    setScanError(null);
+    setShowScanner(false);
+    const result = await vm.connectToQr(text);
+    if (result.ok) {
+      router.replace('/table');
+    } else if (!('conflict' in result && result.conflict)) {
+      setScanError(result.error);
     }
   };
 
@@ -146,8 +160,11 @@ export default function Join() {
         ) : null}
 
         {vm.error && !vm.colorConflict ? (
-          <View style={{ backgroundColor: '#fde8e8', padding: 14, borderRadius: 12 }}>
+          <View style={{ backgroundColor: '#fde8e8', padding: 14, borderRadius: 12, gap: 8 }}>
             <Text style={{ color: colors.red, fontWeight: '700' }}>{vm.error}</Text>
+            <Pressable onPress={() => router.push('/diagnostics')}>
+              <Text style={{ color: colors.green, fontWeight: '800' }}>Report a connection issue →</Text>
+            </Pressable>
           </View>
         ) : null}
 
@@ -306,6 +323,23 @@ export default function Join() {
           )}
         </View>
 
+        {/* Scan host QR code */}
+        <View style={{ backgroundColor: colors.white, borderRadius: 14, padding: 16, gap: 10, borderColor: colors.border, borderWidth: 1 }}>
+          <Pressable
+            onPress={() => { setScanError(null); setShowScanner(true); }}
+            disabled={vm.isConnecting}
+            style={{ backgroundColor: colors.green, padding: 14, borderRadius: 10, alignItems: 'center', opacity: vm.isConnecting ? 0.6 : 1 }}
+          >
+            <Text style={{ color: colors.white, fontSize: 16, fontWeight: '800' }}>
+              {vm.isConnecting ? 'Connecting…' : '▣ Scan host QR code'}
+            </Text>
+          </Pressable>
+          <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center' }}>
+            No typing needed — point the camera at the QR code on the host's lobby screen.
+          </Text>
+          {scanError ? <Text style={{ color: colors.red, fontWeight: '700', textAlign: 'center' }}>{scanError}</Text> : null}
+        </View>
+
         {/* Collapsible Manual Connection Fallback */}
         <View style={{ backgroundColor: colors.white, borderRadius: 14, padding: 16, gap: 12, borderColor: colors.border, borderWidth: 1 }}>
           <Pressable
@@ -378,6 +412,8 @@ export default function Join() {
         <Text style={{ textAlign: 'center', color: colors.muted, fontSize: 13 }}>
           Ensure all players are connected to the same local Wi-Fi router (avoid guest networks with client isolation).
         </Text>
+
+        <QrScannerModal visible={showScanner} onScanned={onScannedQr} onClose={() => setShowScanner(false)} />
       </ScrollView>
     </SafeAreaView>
   );

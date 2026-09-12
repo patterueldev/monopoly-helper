@@ -26,6 +26,17 @@ describe('profileStore', () => {
     expect(store2.getState().profile).toEqual({ name: 'Bob', color: '#4B85B5' });
   });
 
+  it('defaults sounds to on and persists the mute toggle', () => {
+    const store = createProfileStore(storage);
+    expect(store.getState().soundEnabled).toBe(true);
+
+    store.getState().setSoundEnabled(false);
+    expect(store.getState().soundEnabled).toBe(false);
+
+    const store2 = createProfileStore(storage);
+    expect(store2.getState().soundEnabled).toBe(false);
+  });
+
   it('findMyAccount matches account by name case-insensitively', () => {
     const store = createProfileStore(storage);
     store.getState().saveProfile({ name: 'Alice', color: '#B8433B' });

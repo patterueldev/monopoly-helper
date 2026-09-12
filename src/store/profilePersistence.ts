@@ -12,6 +12,7 @@ export const playerProfileSchema = z.object({
 });
 
 export const PROFILE_STORAGE_KEY = 'player:profile';
+export const SOUND_STORAGE_KEY = 'player:soundEnabled';
 
 export function loadProfile(storage: KeyValueStorage): PlayerProfile | null {
   const raw = storage.getString(PROFILE_STORAGE_KEY);
@@ -29,6 +30,20 @@ export function saveProfile(storage: KeyValueStorage, profile: PlayerProfile): b
   if (!result.success) return false;
   try {
     storage.set(PROFILE_STORAGE_KEY, JSON.stringify(result.data));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Game sounds default to on; a stored '0' mutes them. */
+export function loadSoundEnabled(storage: KeyValueStorage): boolean {
+  return storage.getString(SOUND_STORAGE_KEY) !== '0';
+}
+
+export function saveSoundEnabled(storage: KeyValueStorage, enabled: boolean): boolean {
+  try {
+    storage.set(SOUND_STORAGE_KEY, enabled ? '1' : '0');
     return true;
   } catch {
     return false;

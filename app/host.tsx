@@ -1,7 +1,9 @@
 import { useKeepAwake } from 'expo-keep-awake';
 import { useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { colors } from '../src/theme';
+import { encodeJoinQr } from '../src/transport/joinQr';
 import { useHostViewModel } from '../src/viewmodels/useHostViewModel';
 
 export default function Host() {
@@ -44,6 +46,19 @@ export default function Host() {
             </Text>
           ) : null}
         </View>
+
+        {/* QR Join Code */}
+        {vm.ip ? (
+          <View style={{ backgroundColor: colors.white, borderRadius: 14, padding: 16, gap: 8, borderColor: colors.border, borderWidth: 1, alignItems: 'center' }}>
+            <Text style={{ color: colors.muted, fontWeight: '700', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Scan to join
+            </Text>
+            <QRCode value={encodeJoinQr({ host: vm.ip, port: vm.port })} size={200} backgroundColor={colors.white} color={colors.ink} />
+            <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center' }}>
+              Have players tap "Scan QR" on the Join screen instead of typing the address.
+            </Text>
+          </View>
+        ) : null}
 
         {/* Players In Room */}
         <View style={{ backgroundColor: colors.white, borderRadius: 14, padding: 18, gap: 12, borderColor: colors.border, borderWidth: 1 }}>

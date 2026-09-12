@@ -1,4 +1,5 @@
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { useConnectionStore } from '../store/connectionStore';
 import { colors } from '../theme';
 
@@ -27,12 +28,17 @@ export function ConnectionBanner() {
     : LABELS[status] || status;
 
   const tone = status === 'connected' || status === 'listening' ? colors.green : status === 'reconnecting' || status === 'connecting' ? colors.gold : colors.red;
+  const needsHelp = status !== 'connected' && status !== 'listening';
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.white, borderRadius: 10, borderColor: colors.border, borderWidth: 1 }}>
+    <Pressable
+      onPress={() => router.push('/diagnostics')}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.white, borderRadius: 10, borderColor: colors.border, borderWidth: 1 }}
+    >
       <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: tone }} />
       <Text style={{ color: colors.ink, fontWeight: '700', flex: 1 }}>{label}</Text>
-      {lastError && status !== 'connected' && status !== 'listening' ? <Text style={{ color: colors.red, fontSize: 12 }}>{lastError}</Text> : null}
-    </View>
+      {lastError && needsHelp ? <Text style={{ color: colors.red, fontSize: 12 }}>{lastError}</Text> : null}
+      {needsHelp ? <Text style={{ color: colors.green, fontSize: 12, fontWeight: '800' }}>Help →</Text> : null}
+    </Pressable>
   );
 }

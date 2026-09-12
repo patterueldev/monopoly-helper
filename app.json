@@ -2,7 +2,7 @@
   "expo": {
     "name": "Monopoly Banker",
     "slug": "monopoly-helper",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "scheme": "monopolybanker",
     "userInterfaceStyle": "automatic",
@@ -11,15 +11,27 @@
       "bundleIdentifier": "dev.patteruel.monopolybanker",
       "appleTeamId": "2ZL598ZSDC",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocalNetworkUsageDescription": "Monopoly Banker connects to your host's phone directly over your local Wi-Fi network to sync this table's game."
       }
     },
     "android": {
       "package": "dev.patteruel.monopolybanker",
-      "permissions": ["REQUEST_INSTALL_PACKAGES"]
+      "permissions": [
+        "REQUEST_INSTALL_PACKAGES",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE"
+      ]
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-audio",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Monopoly Banker to use the camera to scan a host's QR code when joining a table."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
