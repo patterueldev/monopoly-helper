@@ -22,11 +22,12 @@ export interface HandleInboundContext {
 const HOST_ONLY_INTENT_TYPES = new Set(['settlement.started', 'settlement.dismissed', 'game.ended', 'player.jailed', 'player.released']);
 
 /** Banker-only intents a client may never submit: settlement controls, game end,
- * jail/release, and any transfer issued by the Bank (e.g. Pass GO). Local host
- * dispatch is separately authorized by the ledger's isBanker check. */
+ * jail/release, any transfer issued by the Bank (e.g. Pass GO), and payment
+ * requests that collect into the Bank (the reducer re-checks banker authority). */
 export function isBankerOnlyIntent(intent: Intent): boolean {
   if (HOST_ONLY_INTENT_TYPES.has(intent.type)) return true;
-  return intent.type === 'transfer' && intent.payload.from === 'bank';
+  return (intent.type === 'transfer' && intent.payload.from === 'bank')
+    || (intent.type === 'request.created' && intent.payload.to === 'bank');
 }
 
 export type InboundOutcome =

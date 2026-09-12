@@ -70,9 +70,11 @@ single-device "banker" app).
    - **Subnet TCP Discovery**: Zero-config Wi-Fi table discovery via fast parallel subnet probing (`discovery.ts`, `discoveryLogic.ts`) over port 51837. Players tapping "Join Game" automatically see active nearby tables with host avatar, name, and room count, with a 1-tap "Join Table" action (and collapsible manual IP fallback).
 
 10. **Color Conflict Prevention & Interactive Alternative Color Selection** (PR #21) —
-   - **Join-time Conflict Resolution**: When a player joins a table where their preferred color is already taken by the host or an earlier participant, the app presents an interactive **Color Selection Card** showing who holds the color and allows them to pick from remaining available colors before entering the table.
-   - **Host Lobby Color Swatches**: Players in the lobby can tap their player token to cycle/change to an available color before starting.
-   - **Pass & Play Collision Guard**: Guaranteed conflict-free auto-assignment of unused colors across all single-device players.
+    - **Join-time Conflict Resolution**: When a player joins a table where their preferred color is already taken by the host or an earlier participant, the app presents an interactive **Color Selection Card** showing who holds the color and allows them to pick from remaining available colors before entering the table.
+    - **Host Lobby Color Swatches**: Players in the lobby can tap their player token to cycle/change to an available color before starting.
+    - **Pass & Play Collision Guard**: Guaranteed conflict-free auto-assignment of unused colors across all single-device players.
+
+11. **Payment Requests** (T-011/T-012) — any active player can request money anytime (not turn-gated): `request.created` stores a pending request in the ledger (so all devices see it), and the payer's **Approve** atomically performs the transfer (`request.resolved` outcome `paid`), **Decline** closes it, the requester can **Cancel**. The Banker's collect-into-Bank uses the same flow via a "Receive into: Me / Bank" toggle on the request screen; only the Banker may request into the Bank (reducer + `hostInbound` pre-reject). UI: `app/pay.tsx` request mode, `app/requests.tsx`, Table "Request money" / "Requests (N)" badge / Banker "Collect for Bank" shortcut, History labels. Approved requests are intentionally not undoable via `transfer.reversed` (reverse with a pay-back).
 
 ## Working conventions established this project
 
@@ -91,7 +93,7 @@ single-device "banker" app).
 
 ## Running it
 
-- `npm test` — Vitest, pure-logic test suite (87 tests across 12 suites).
+- `npm test` — Vitest, pure-logic test suite (124 tests across 12 suites).
 - `npm run typecheck`, `npm run lint` — both clean.
 - **This app cannot run in Expo Go** — `react-native-tcp-socket` is a native
   module. Use the automated APK from GitHub Releases or run a local dev build

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyEvent, fold, initialState } from './reducer';
 import { makeEvent } from './intents';
-import { circulation, finalRankings, isJailed, currentTurnPlayer, lostInCirculation, nextTurnPlayer } from './selectors';
+import { circulation, finalRankings, isJailed, currentTurnPlayer, lostInCirculation, nextTurnPlayer, incomingRequests, outgoingRequests, pendingRequestCount } from './selectors';
 import { Account, DEFAULT_CONFIG, Settlement } from './types';
 import { buildTallyFromSettlements } from '../viewmodels/settlementCalculations';
 
@@ -371,5 +371,91 @@ describe('final rankings (T-007)', () => {
     const s = fold([hosted2(), begin, hostSub, bSub, ended]);
     expect(s.invalid).toBe(false);
     expect(finalRankings(s).map((e) => [e.playerId, e.rank])).toEqual([['host', 1], ['b', 2]]);
+  });
+});
+
+describe('payment requests (T-011/T-012)', () => {
+  // started() hosts 'a' as the Banker.
+  const req = (seq: number, actorId: string, requestId: string, from: string, to: string, amount: number, tag = requestId) =>
+    makeEvent('request.created', { requestId, from, to, amount, reason: { kind: 'rent' } }, actorId, seq, `intent-${tag}`);
+  const resolve = (seq: number, actorId: string, requestId: string, outcome: 'paid' | 'declined' | 'cancelled', tag = `${requestId}-${outcome}`) =>
+    makeEvent('request.resolved', { requestId, outcome }, actorId, seq, `intent-${tag}`);
+
+  it('creates a pending player request without moving money', () => {
+    const s = fold([started(), req(1, 'b', 'r1', 'a', 'b', 100)]);
+    expect(s.invalid).toBe(false);
+    expect(s.balances).toEqual({ bank: 0, a: 1500, b: 1500 });
+    expect(s.requests.r1.status).toBe('pending');
+    expect(incomingRequests(s, 'a').map((r) => r.id)).toEqual(['r1']);
+    expect(outgoingRequests(s, 'b').map((r) => r.id)).toEqual(['r1']);
+    expect(pendingRequestCount(s, 'a')).toBe(1);
+    expect(pendingRequestCount(s, 'b')).toBe(0);
+  });
+
+  it('payer approval moves money atomically', () => {
+    const s = fold([started(), req(1, 'b', 'r1', 'a', 'b', 100), resolve(2, 'a', 'r1', 'paid')]);
+    expect(s.invalid).toBe(false);
+    expect(s.balances.a).toBe(1400);
+    expect(s.balances.b).toBe(1600);
+    expect(s.requests.r1.status).toBe('paid');
+    expect(incomingRequests(s, 'a')).toEqual([]);
+  });
+
+  it('declining closes the request with no money movement', () => {
+    const s = fold([started(), req(1, 'b', 'r1', 'a', 'b', 100), resolve(2, 'a', 'r1', 'declined')]);
+    expect(s.invalid).toBe(false);
+    expect(s.balances.a).toBe(1500);
+    expect(s.requests.r1.status).toBe('declined');
+  });
+
+  it('the requester can cancel their own request', () => {
+    const s = fold([started(), req(1, 'b', 'r1', 'a', 'b', 100), resolve(2, 'b', 'r1', 'cancelled')]);
+    expect(s.invalid).toBe(false);
+    expect(s.requests.r1.status).toBe('cancelled');
+  });
+
+  it('rejects approval by anyone but the payer, and cancellation by the payer', () => {
+    expect(applyEvent(fold([started(), req(1, 'b', 'r1', 'a', 'b', 100)]), resolve(2, 'b', 'r1', 'paid')).invalid).toBe(true);
+    expect(applyEvent(fold([started(), req(1, 'b', 'r1', 'a', 'b', 100)]), resolve(2, 'a', 'r1', 'cancelled')).invalid).toBe(true);
+  });
+
+  it('the Banker collects into the Bank; a non-banker cannot', () => {
+    const collected = fold([started(), req(1, 'a', 'tax', 'b', 'bank', 200), resolve(2, 'b', 'tax', 'paid')]);
+    expect(collected.invalid).toBe(false);
+    expect(collected.balances.b).toBe(1300);
+    expect(collected.requests.tax.status).toBe('paid');
+    expect(applyEvent(fold([started()]), req(1, 'b', 'fake', 'a', 'bank', 200)).invalid).toBe(true);
+  });
+
+  it('rejects requests that bill the Bank or reuse a requestId', () => {
+    const s = fold([started(), req(1, 'b', 'r1', 'a', 'b', 100)]);
+    expect(applyEvent(fold([started()]), req(1, 'a', 'r2', 'bank', 'a', 100)).invalid).toBe(true);
+    expect(applyEvent(s, req(2, 'b', 'r1', 'a', 'b', 50, 'reuse')).invalid).toBe(true);
+  });
+
+  it('cannot resolve a non-pending or unknown request', () => {
+    expect(applyEvent(fold([started()]), resolve(1, 'a', 'nope', 'paid')).invalid).toBe(true);
+    const paid = fold([started(), req(1, 'b', 'r1', 'a', 'b', 100), resolve(2, 'a', 'r1', 'paid')]);
+    expect(applyEvent(paid, resolve(3, 'a', 'r1', 'paid', 'r1-paid-again')).invalid).toBe(true);
+  });
+
+  it('blocks creates and approvals during settlement and after the game ends', () => {
+    const begin = makeEvent('settlement.started', { participantIds: ['a', 'b'] }, 'a', 1, 'settle');
+    const settling = fold([started(), begin]);
+    expect(applyEvent(settling, req(2, 'b', 'r1', 'a', 'b', 100)).invalid).toBe(true);
+    const settleAfterRequest = makeEvent('settlement.started', { participantIds: ['a', 'b'] }, 'a', 2, 'settle-after-request');
+    const pending = fold([started(), req(1, 'b', 'r1', 'a', 'b', 100), settleAfterRequest]);
+    expect(pending.invalid).toBe(false);
+    expect(applyEvent(pending, resolve(3, 'a', 'r1', 'paid')).invalid).toBe(true);
+    expect(applyEvent(pending, resolve(3, 'a', 'r1', 'declined')).invalid).toBe(false);
+  });
+
+  it('blocks approval when the payer is eliminated', () => {
+    const pending = fold([
+      started(),
+      req(1, 'b', 'r1', 'a', 'b', 100),
+      makeEvent('player.eliminated', { accountId: 'a', creditorId: 'b' }, 'bank', 2, 'elim'),
+    ]);
+    expect(applyEvent(pending, resolve(3, 'a', 'r1', 'paid')).invalid).toBe(true);
   });
 });

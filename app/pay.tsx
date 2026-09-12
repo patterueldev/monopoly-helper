@@ -18,7 +18,7 @@ import { useProfileStore } from '../src/store/profileStore';
 import { useConnectionStore } from '../src/store/connectionStore';
 import { bankerAccountId } from '../src/ledger/selectors';
 import { colors } from '../src/theme';
-import { buildTransfer } from '../src/ledger/intents';
+import { buildRequest, buildTransfer } from '../src/ledger/intents';
 import { TransferReason } from '../src/ledger/types';
 
 type ReasonKind = 'rent' | 'trade' | 'buy' | 'station' | 'other';
@@ -32,7 +32,7 @@ const REASONS: Array<{ kind: ReasonKind; label: string }> = [
 ];
 
 export default function Pay() {
-  const { to: paramTo, reason: paramReason, from: paramFrom } = useLocalSearchParams<{ to?: string; reason?: string; from?: string }>();
+  const { to: paramTo, reason: paramReason, from: paramFrom, mode: paramMode, collect: paramCollect } = useLocalSearchParams<{ to?: string; reason?: string; from?: string; mode?: string; collect?: string }>();
   const state = useGameStore((x) => x.state);
   const dispatch = useGameStore((x) => x.dispatch);
   const findMyAccount = useProfileStore((x) => x.findMyAccount);
@@ -44,8 +44,13 @@ export default function Pay() {
   // Banker mode: the Host pays a player from the Bank (T-003). Only the Host
   // device acting as the Host's player account may use it; everyone else falls
   // back to a regular player-initiated payment.
+  // Request mode: same screen asks another player to pay. The requester is the
+  // destination — the Host (wearing the banker hat) may instead collect into
+  // the Bank; one request.created intent covers both (T-011/T-012).
   const bankerId = bankerAccountId(state);
-  const isBankerMode = paramFrom === 'bank' && role === 'host' && !!bankerId;
+  const isRequestMode = paramMode === 'request';
+  const canCollectForBank = role === 'host' && !!bankerId;
+  const isBankerMode = !isRequestMode && paramFrom === 'bank' && role === 'host' && !!bankerId;
   const from = isBankerMode ? 'bank' : (myAccount?.id ?? '');
 
   const initialTo = isBankerMode
@@ -56,6 +61,16 @@ export default function Pay() {
   const initialReason: ReasonKind = REASONS.some((r) => r.kind === paramReason) ? (paramReason as ReasonKind) : 'other';
 
   const [to, setTo] = useState(initialTo);
+  // Request mode reinterprets the fields: `payer` is who should pay, `destination`
+  // is who-approved-money goes to (me, or the Bank when the Banker collects).
+  const defaultDestination = isRequestMode
+    ? (canCollectForBank && paramCollect === 'bank' ? 'bank' : (myAccount?.id ?? ''))
+    : '';
+  const [destination, setDestination] = useState(defaultDestination);
+  const initialPayer = paramTo && players.some((p) => p.id === paramTo) && paramTo !== defaultDestination
+    ? paramTo
+    : (players.find((p) => p.id !== defaultDestination)?.id ?? '');
+  const [payer, setPayer] = useState(initialPayer);
   const [reason, setReason] = useState<ReasonKind>(initialReason);
   const [amount, setAmount] = useState('');
   const [amountHistory, setAmountHistory] = useState<string[]>([]);
@@ -75,7 +90,23 @@ export default function Pay() {
     setAmountHistory(amountHistory.slice(0, -1));
   };
 
+  const pickDestination = (next: string) => {
+    setDestination(next);
+    // Keep the payer valid: it can never equal the destination.
+    if (payer === next) setPayer(players.find((p) => p.id !== next)?.id ?? '');
+  };
+
   const submit = () => {
+    if (isRequestMode) {
+      const value = Number(amount);
+      const requester = destination === 'bank' ? (bankerId ?? '') : (myAccount?.id ?? '');
+      if (!payer || !destination || !requester || payer === destination || !Number.isSafeInteger(value) || value <= 0) return;
+      const transferReason: TransferReason = reason === 'other' ? { kind: 'other' } : { kind: reason };
+      const intent = buildRequest(state, payer, destination, value, transferReason, requester, `request-${Date.now()}-${payer}-${destination}-${value}`);
+      const result = dispatch(intent);
+      if (result.ok) router.back();
+      return;
+    }
     const value = Number(amount);
     if (!from || !to || !Number.isSafeInteger(value) || value <= 0 || from === to) return;
     const transferReason: TransferReason = reason === 'other' ? { kind: 'other' } : { kind: reason };
@@ -84,7 +115,10 @@ export default function Pay() {
     if (result.ok) router.back();
   };
 
-  const options = isBankerMode ? players : [...players, { id: 'bank', name: 'Bank' }];
+  const options = isRequestMode
+    ? players // you can't bill the Bank; the "receive into" toggle below chooses Bank as destination instead
+    : (isBankerMode ? players : [...players, { id: 'bank', name: 'Bank' }]);
+  const visibleOptions = isRequestMode ? options.filter((p) => p.id !== destination) : options.filter((p) => p.id !== from);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
@@ -95,18 +129,45 @@ export default function Pay() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         >
-          <Text style={{ fontSize: 34, fontWeight: '900', color: colors.green }}>{isBankerMode ? 'Pay from Bank' : 'Pay'}</Text>
+          <Text style={{ fontSize: 34, fontWeight: '900', color: colors.green }}>{isRequestMode ? (destination === 'bank' ? 'Collect for Bank' : 'Request money') : (isBankerMode ? 'Pay from Bank' : 'Pay')}</Text>
 
-          <Text style={{ fontWeight: '800', color: colors.muted, fontSize: 16 }}>To</Text>
+          {isRequestMode && canCollectForBank ? (
+            <>
+              <Text style={{ fontWeight: '800', color: colors.muted, fontSize: 16 }}>Receive into</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {[{ id: myAccount?.id ?? '', label: 'Me' }, { id: 'bank', label: 'Bank' }].map((d) => {
+                  const isSelected = destination === d.id;
+                  return (
+                    <Pressable
+                      key={d.label}
+                      onPress={() => pickDestination(d.id)}
+                      style={{
+                        flex: 1,
+                        padding: 12,
+                        borderRadius: 10,
+                        alignItems: 'center',
+                        backgroundColor: isSelected ? '#DCEBE1' : colors.white,
+                        borderColor: isSelected ? colors.green : colors.border,
+                        borderWidth: 1,
+                      }}
+                    >
+                      <Text style={{ fontWeight: isSelected ? '700' : '400' }}>{d.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
+          <Text style={{ fontWeight: '800', color: colors.muted, fontSize: 16 }}>{isRequestMode ? 'From' : 'To'}</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {options
-              .filter((p) => p.id !== from)
+            {visibleOptions
               .map((p) => {
-                const isSelected = to === p.id;
+                const isSelected = isRequestMode ? payer === p.id : to === p.id;
                 return (
                   <Pressable
                     key={p.id}
-                    onPress={() => setTo(p.id)}
+                    onPress={() => (isRequestMode ? setPayer(p.id) : setTo(p.id))}
                     style={{
                       padding: 12,
                       borderRadius: 10,
@@ -220,7 +281,7 @@ export default function Pay() {
               marginTop: 8,
             }}
           >
-            <Text style={{ color: colors.white, fontSize: 18, fontWeight: '800' }}>Confirm payment</Text>
+            <Text style={{ color: colors.white, fontSize: 18, fontWeight: '800' }}>{isRequestMode ? 'Send request' : 'Confirm payment'}</Text>
           </Pressable>
         </ScrollView>
 

@@ -39,3 +39,5 @@ This checklist tracks the current product work. Multiplayer Host/Client behavior
 - [x] T-008 — Remove Tax and Card from payment reasons, and remove Pass GO from the reason list now that it is a Banker function.
 - [x] T-009 — Track Lost in Circulation as an explicit amount when money leaves play and the destination is unclear.
 - [x] T-010 — Restrict sending any player, including the Host/Banker, to Jail to the Host/Banker.
+- [x] T-011 — Add player-to-player payment requests: any active player can request anytime; the payer approves (atomic transfer) or declines; the requester can cancel. Requests are ledger events (`request.created`/`request.resolved`) so all devices see them.
+- [x] T-012 — Let the Banker collect into the Bank with the same request flow: the Host picks "Receive into: Me / Bank" when requesting; only the Banker may request into the Bank.

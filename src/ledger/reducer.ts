@@ -1,7 +1,7 @@
 import { Account, GameEvent, GameState, Settlement, DEFAULT_CONFIG, parseEvent, SettlementStatus } from './types';
 
-export const initialState = (): GameState => ({ started: false, ended: false, accounts: {}, balances: {}, eliminated: new Set(), reversed: new Set(), events: [], settlements: {}, settlementStatus: {}, settlementStarted: false, jailed: new Set(), lostInCirculation: 0, invalid: false });
-const copy = (s: GameState): GameState => ({ ...s, accounts: { ...s.accounts }, balances: { ...s.balances }, eliminated: new Set(s.eliminated), reversed: new Set(s.reversed), events: [...s.events], tally: s.tally?.map(x => ({ ...x, rows: x.rows?.map(row => ({ ...row })) })), settlements: Object.fromEntries(Object.entries(s.settlements).map(([id, settlement]) => [id, { ...settlement, rows: settlement.rows?.map(row => ({ ...row })) }])), settlementStatus: { ...s.settlementStatus }, jailed: new Set(s.jailed), currentTurnAccountId: s.currentTurnAccountId });
+export const initialState = (): GameState => ({ started: false, ended: false, accounts: {}, balances: {}, eliminated: new Set(), reversed: new Set(), events: [], settlements: {}, settlementStatus: {}, settlementStarted: false, jailed: new Set(), lostInCirculation: 0, requests: {}, invalid: false });
+const copy = (s: GameState): GameState => ({ ...s, accounts: { ...s.accounts }, balances: { ...s.balances }, eliminated: new Set(s.eliminated), reversed: new Set(s.reversed), events: [...s.events], tally: s.tally?.map(x => ({ ...x, rows: x.rows?.map(row => ({ ...row })) })), settlements: Object.fromEntries(Object.entries(s.settlements).map(([id, settlement]) => [id, { ...settlement, rows: settlement.rows?.map(row => ({ ...row })) }])), settlementStatus: { ...s.settlementStatus }, jailed: new Set(s.jailed), requests: { ...s.requests }, currentTurnAccountId: s.currentTurnAccountId });
 const bankId = (s: GameState) => Object.values(s.accounts).find(a => a.kind === 'bank' && a.unlimited)?.id;
 const activePlayers = (s: GameState) => Object.values(s.accounts).filter(a => a.kind === 'player' && !s.eliminated.has(a.id));
 const hostId = (s: GameState) => s.hostAccountId ?? Object.values(s.accounts).find(a => a.kind === 'player')?.id;
@@ -38,6 +38,39 @@ export function applyEvent(previous: GameState, input: GameEvent): GameState { c
     case 'turn.advanced': { const to = parsed.payload.toAccountId; const a = s.accounts[to]; if (!s.started || s.ended || !a || a.kind !== 'player' || s.eliminated.has(to)) return fail(); s.currentTurnAccountId = to; break; }
     case 'player.jailed': { const id = parsed.payload.accountId; const a = s.accounts[id]; if (!s.started || s.ended || !a || a.kind !== 'player' || s.eliminated.has(id) || !isBanker(s, parsed.actorId)) return fail(); s.jailed.add(id); break; }
     case 'player.released': { const id = parsed.payload.accountId; const a = s.accounts[id]; if (!s.started || s.ended || !a || a.kind !== 'player' || s.eliminated.has(id) || !isBanker(s, parsed.actorId)) return fail(); s.jailed.delete(id); break; }
+    case 'request.created': {
+      const { requestId, from, to, amount } = parsed.payload;
+      const fa = s.accounts[from], ta = s.accounts[to];
+      const bank = bankId(s);
+      // The requester is the destination: normally the requester's own account,
+      // the Banker when collecting into the Bank. A non-banker can never demand
+      // money into the Bank, and nobody can bill the Bank (feature 1 covers payouts).
+      const requesterOk = to === bank ? isBanker(s, parsed.actorId) : parsed.actorId === to;
+      if (!s.started || s.ended || s.settlementStarted || !fa || !ta || from === to || from === bank || s.eliminated.has(from) || s.eliminated.has(to) || s.requests[requestId] || !Number.isSafeInteger(amount) || amount <= 0 || !requesterOk) return fail();
+      s.requests[requestId] = { id: requestId, from, to, amount, reason: parsed.payload.reason, createdBy: parsed.actorId, createdSeq: parsed.seq, status: 'pending' };
+      break;
+    }
+    case 'request.resolved': {
+      const { requestId, outcome } = parsed.payload;
+      const r = s.requests[requestId];
+      if (!s.started || s.ended || !r || r.status !== 'pending') return fail();
+      if (outcome === 'cancelled') {
+        if (parsed.actorId !== r.createdBy) return fail();
+        s.requests[requestId] = { ...r, status: 'cancelled', resolvedSeq: parsed.seq };
+        break;
+      }
+      // Paid and declined both belong to the payer; declining closes the request
+      // with no money movement, approving moves funds atomically below.
+      if (parsed.actorId !== r.from) return fail();
+      if (outcome === 'declined') { s.requests[requestId] = { ...r, status: 'declined', resolvedSeq: parsed.seq }; break; }
+      const fa = s.accounts[r.from], ta = s.accounts[r.to];
+      if (s.settlementStarted || !fa || !ta || s.eliminated.has(r.from) || s.eliminated.has(r.to)) return fail();
+      const beforeFrom = s.balances[r.from] ?? 0, beforeTo = s.balances[r.to] ?? 0;
+      if (!change(s, r.from, -r.amount) || !change(s, r.to, r.amount)) { s.balances[r.from] = beforeFrom; s.balances[r.to] = beforeTo; return fail(); }
+      if (fa.kind === 'player') s.lastPayer = r.from;
+      s.requests[requestId] = { ...r, status: 'paid', resolvedSeq: parsed.seq };
+      break;
+    }
   }
   s.events.push(parsed); return s;
 }
