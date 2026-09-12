@@ -5,9 +5,9 @@ import * as Haptics from 'expo-haptics';
 import { useGameStore } from '../store/gameStore';
 import { useProfileStore } from '../store/profileStore';
 import { detectCues, AudioCue } from '../audio/cues';
-import turnSound from '../audio/turn.wav';
-import jailSound from '../audio/jail.wav';
-import bankSound from '../audio/bank.wav';
+import turnSound from '../../assets/sounds/turn.wav';
+import jailSound from '../../assets/sounds/jail.wav';
+import bankSound from '../../assets/sounds/bank.wav';
 
 // Plays a distinct bell + haptic for your turn, being jailed, and collecting
 // from the Bank. Mounted once in app/_layout.tsx; renders nothing.

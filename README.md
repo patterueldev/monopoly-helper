@@ -127,6 +127,10 @@ Both Android and iOS builds are fully automated via GitHub Actions using **local
 - Gates the merge on `npm test`, `npm run typecheck`, and `npm run lint`.
 - Superseded runs are cancelled automatically (`cancel-in-progress`).
 
+### Build check (`.github/workflows/build-check.yml`)
+- Runs on every pull request targeting `main`.
+- Bundles the JS for Android and iOS (`expo export`) without native compilation, catching unresolvable modules/assets before merge — the full release builds only run after a merge, which is too late.
+
 ### Release version gate (`.github/workflows/version-check.yml`)
 - Runs on every pull request targeting `main`.
 - A version bump is **required** when the PR touches app code or build config (`app/`, `src/`, `assets/`, `app.json`, `package.json`, `eas.json`, toolchain configs, `google-services.json`).

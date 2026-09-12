@@ -1,0 +1,40 @@
+name: Build check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm config set legacy-peer-deps true
+          npm install --legacy-peer-deps
+
+      # Bundles the JS for both platforms without native compilation. This
+      # catches unresolvable modules/assets (e.g. a bad asset import path)
+      # before merge — the full release builds only run after a merge, which
+      # is too late to catch them. No secrets required.
+      - name: Bundle Android JS
+        run: npx expo export --platform android
+
+      - name: Bundle iOS JS
+        run: npx expo export --platform ios
