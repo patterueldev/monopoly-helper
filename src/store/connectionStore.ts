@@ -5,6 +5,7 @@ import { HostTransport } from '../transport/HostTransport';
 import { ClientTransport, ConnectionState } from '../transport/ClientTransport';
 import { DEFAULT_PORT } from '../transport/wireProtocol';
 import { log } from '../diagnostics/logBuffer';
+import { clearLastHostGameId, saveLastHostGameId } from './persistence';
 
 declare const require: (name: string) => any;
 const uuid = () => { try { return require('expo-crypto').randomUUID(); } catch { return `device-${Date.now()}-${Math.random()}`; } };
@@ -69,6 +70,7 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
         return { ok: false, error: message };
       }
       hostTransport = transport;
+      saveLastHostGameId(game.storage, game.gameId);
       log('session', 'info', `hosting on port ${port}`);
       store.getState().attachTransport(transport, 'host', { onHostEvent: (event: GameEvent) => transport.broadcastEvent(event) });
       set({ role: 'host', status: 'listening', peerCount: transport.connectedPeerCount, lastError: null });
@@ -78,6 +80,7 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
 
     joinGame: async (host, port = DEFAULT_PORT) => {
       const transport = new ClientTransport();
+      clearLastHostGameId(store.getState().storage);
       log('session', 'info', `joining ${host}:${port}`);
       transport.onConnectionStateChange(state => {
         set({ status: state });
@@ -102,8 +105,10 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
     },
 
     leaveSession: () => {
+      const wasHost = get().role === 'host';
       stopPeerPoll();
       store.getState().detachTransport();
+      if (wasHost) clearLastHostGameId(store.getState().storage);
       hostTransport = null;
       clientTransport = null;
       set({ role: 'single', status: 'idle', peerCount: 0, lastError: null });

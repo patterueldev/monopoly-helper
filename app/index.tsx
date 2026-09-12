@@ -1,9 +1,13 @@
 import { Link, router } from 'expo-router';
 import * as Application from 'expo-application';
+import Constants from 'expo-constants';
 import { useState } from 'react';
 import { Modal, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import { useGameStore } from '../src/store/gameStore';
+import { useConnectionStore } from '../src/store/connectionStore';
 import { useProfileStore } from '../src/store/profileStore';
+import { isGameStarted } from '../src/ledger/selectors';
+import { lastHostGameId } from '../src/store/persistence';
 import { colors, PLAYER_PALETTE } from '../src/theme';
 import { DEFAULT_CONFIG, Account } from '../src/ledger/types';
 import { useAppUpdate } from '../src/viewmodels/useAppUpdate';
@@ -13,6 +17,10 @@ import { TestFlightNudge } from '../src/components/TestFlightNudge';
 export default function Home() {
   const games = useGameStore((x) => x.listGames)();
   const createGame = useGameStore((x) => x.createGame);
+  const gameId = useGameStore((x) => x.gameId);
+  const gameState = useGameStore((x) => x.state);
+  const storage = useGameStore((x) => x.storage);
+  const hostGame = useConnectionStore((x) => x.hostGame);
   const profile = useProfileStore((s) => s.profile);
   const saveProfile = useProfileStore((s) => s.saveProfile);
 
@@ -20,6 +28,7 @@ export default function Home() {
   const [hostName, setHostName] = useState(profile?.name ?? '');
   const [hostColor, setHostColor] = useState(profile?.color ?? PLAYER_PALETTE[0]);
   const [hostError, setHostError] = useState<string | null>(null);
+  const canResumeHost = !!gameId && lastHostGameId(storage) === gameId && gameState.started && !gameState.ended;
 
   const update = useAppUpdate();
   const installedVersion = Application.nativeApplicationVersion ?? '?';
@@ -69,6 +78,12 @@ export default function Home() {
     }
   };
 
+  const onResumeHost = async () => {
+    const result = await hostGame();
+    if (result.ok) router.replace(isGameStarted(gameState) ? '/table' : '/host');
+    else setHostError(result.error);
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 28, gap: 12 }}>
@@ -97,7 +112,7 @@ export default function Home() {
           />
         ) : null}
 
-        {Platform.OS === 'ios' ? <TestFlightNudge version={installedVersion} /> : null}
+        {Platform.OS === 'ios' ? <TestFlightNudge version={installedVersion} expectedVersion={Constants.expoConfig?.version} /> : null}
 
         <Pressable
           onPress={openHostSetup}
@@ -107,6 +122,15 @@ export default function Home() {
             Host Game (Wi-Fi Multiplayer)
           </Text>
         </Pressable>
+
+        {canResumeHost ? (
+          <Pressable
+            onPress={onResumeHost}
+            style={{ backgroundColor: colors.green, padding: 16, borderRadius: 14, alignItems: 'center' }}
+          >
+            <Text style={{ color: colors.white, fontSize: 18, fontWeight: '800' }}>Resume Last Hosted Game</Text>
+          </Pressable>
+        ) : null}
 
         <Link href="/join" asChild>
           <Pressable style={{ borderColor: colors.green, borderWidth: 2, padding: 16, borderRadius: 14, alignItems: 'center' }}>

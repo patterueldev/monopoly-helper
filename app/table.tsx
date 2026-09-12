@@ -6,7 +6,7 @@ import { useGameStore } from '../src/store/gameStore';
 import { useProfileStore } from '../src/store/profileStore';
 import { useConnectionStore } from '../src/store/connectionStore';
 import { useSettlementViewModel } from '../src/viewmodels/useSettlementViewModel';
-import { activePlayers, balance, bankerAccountId, circulation, currentTurnPlayer, lostInCirculation, nextTurnPlayer, isJailed, pendingRequestCount } from '../src/ledger/selectors';
+import { activePlayers, balance, bankerAccountId, circulation, currentTurnPlayer, isGameStarted, lostInCirculation, nextTurnPlayer, isJailed, pendingRequestCount } from '../src/ledger/selectors';
 import { colors } from '../src/theme';
 import { ConnectionBanner } from '../src/components/ConnectionBanner';
 
@@ -38,6 +38,19 @@ export default function Table() {
   useEffect(() => {
     if (settlementStarted && !ended) router.replace('/settlement');
   }, [settlementStarted, ended]);
+
+  if (role === 'client' && !isGameStarted(state)) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 14 }}>
+          <Text style={{ fontSize: 32, fontWeight: '900', color: colors.green }}>Waiting for the host</Text>
+          <Text style={{ color: colors.muted, fontSize: 17, lineHeight: 24 }}>
+            The table will open here when the host starts the game.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const beginSettlement = () => {
     const result = settlement.startSettlement();
@@ -272,27 +285,30 @@ export default function Table() {
           </Pressable>
         </Link>
 
-        <Pressable
-          disabled={!isBanker}
-          onPress={() =>
-            Alert.alert(
-              'Pass GO',
-              'Choose a player',
-              players.map((p) => ({ text: p.name, onPress: () => passGo(p.id) }))
-            )
-          }
-          style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center', opacity: isBanker ? 1 : 0.45 }}
-        >
-          <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>Pass GO</Text>
-        </Pressable>
+        {isBanker ? (
+          <Pressable
+            onPress={() =>
+              Alert.alert(
+                'Pass GO',
+                'Choose a player',
+                players.map((p) => ({ text: p.name, onPress: () => passGo(p.id) }))
+              )
+            }
+            style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center' }}
+          >
+            <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>Pass GO</Text>
+          </Pressable>
+        ) : null}
 
-        <Pressable
-          disabled={!isHost || settlementStarted}
-          onPress={beginSettlement}
-          style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center', opacity: isHost && !settlementStarted ? 1 : 0.45 }}
-        >
-          <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>{settlementStarted ? 'Settlement in progress' : 'End game & settle'}</Text>
-        </Pressable>
+        {isHost ? (
+          <Pressable
+            disabled={settlementStarted}
+            onPress={beginSettlement}
+            style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center', opacity: settlementStarted ? 0.45 : 1 }}
+          >
+            <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>{settlementStarted ? 'Settlement in progress' : 'End game & settle'}</Text>
+          </Pressable>
+        ) : null}
 
         <Link href="/history" asChild>
           <Pressable style={{ padding: 12, alignItems: 'center' }}>

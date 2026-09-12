@@ -17,6 +17,10 @@ export function productionStorage(): KeyValueStorage { return require('react-nat
 export const gameKey = (id: string) => `game:${id}`;
 export const draftKey = (id: string) => `draft:${id}`;
 export const lastGameId = (storage: KeyValueStorage) => storage.getString('lastGameId');
+export const LAST_HOST_GAME_KEY = 'lastHostGameId';
+export const lastHostGameId = (storage: KeyValueStorage) => storage.getString(LAST_HOST_GAME_KEY);
+export const saveLastHostGameId = (storage: KeyValueStorage, id: string) => storage.set(LAST_HOST_GAME_KEY, id);
+export const clearLastHostGameId = (storage: KeyValueStorage) => storage.set(LAST_HOST_GAME_KEY, '');
 
 export function saveGame(storage: KeyValueStorage, id: string, events: GameEvent[]) {
   if (storage.getString(`${gameKey(id)}:version`) !== '1') storage.set(`${gameKey(id)}:version`, '1');

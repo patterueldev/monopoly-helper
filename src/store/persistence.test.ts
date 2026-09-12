@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryStorage, loadGame, saveGame, scanEvents, saveDraft, loadDraft } from './persistence';
+import { clearLastHostGameId, lastHostGameId, MemoryStorage, loadGame, saveGame, scanEvents, saveDraft, loadDraft, saveLastHostGameId } from './persistence';
 import { makeEvent } from '../ledger/intents';
 import { Account, DEFAULT_CONFIG } from '../ledger/types';
 
@@ -18,5 +18,12 @@ describe('persistence adapter and recovery', () => {
     const renamed = makeEvent('player.renamed', { accountId: 'a', name: 'A {quoted} "name"', color: 'red' }, 'bank', 1, 'rename');
     const raw = `[${JSON.stringify(start)},${JSON.stringify(renamed)},${JSON.stringify(start).slice(0, 20)}`;
     const result = scanEvents(raw); expect(result.events).toHaveLength(2); expect(result.corrupt).toBe(true);
+  });
+  it('remembers and clears the last locally hosted game', () => {
+    const storage = new MemoryStorage();
+    saveLastHostGameId(storage, 'g1');
+    expect(lastHostGameId(storage)).toBe('g1');
+    clearLastHostGameId(storage);
+    expect(lastHostGameId(storage)).toBe('');
   });
 });

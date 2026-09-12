@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { useConnectionStore } from '../store/connectionStore';
 import { useGameStore } from '../store/gameStore';
+import { useProfileStore } from '../store/profileStore';
 import { DEFAULT_PORT } from '../transport/wireProtocol';
 import { PLAYER_PALETTE } from '../theme';
 
@@ -11,14 +12,18 @@ declare const require: (name: string) => any;
  * LAN address, live connected players, and start-game gate. */
 export function useHostViewModel() {
   const status = useConnectionStore((s) => s.status);
+  const role = useConnectionStore((s) => s.role);
   const peerCount = useConnectionStore((s) => s.peerCount);
   const lastError = useConnectionStore((s) => s.lastError);
   const hostGame = useConnectionStore((s) => s.hostGame);
   const leaveSession = useConnectionStore((s) => s.leaveSession);
 
-  const accounts = useGameStore((s) => s.state.accounts);
+  const state = useGameStore((s) => s.state);
+  const accounts = state.accounts;
   const dispatch = useGameStore((s) => s.dispatch);
+  const findMyAccount = useProfileStore((s) => s.findMyAccount);
   const players = Object.values(accounts).filter((a) => a.kind === 'player');
+  const hostPlayerId = findMyAccount(accounts)?.id;
 
   const usedColors = new Set(players.map((p) => p.color));
   const availableColors = PLAYER_PALETTE.filter((c) => !usedColors.has(c));
@@ -43,7 +48,7 @@ export function useHostViewModel() {
   }, []);
 
   useEffect(() => {
-    hostGame(DEFAULT_PORT);
+    if (role !== 'host' || status !== 'listening') hostGame(DEFAULT_PORT);
     return () => {
       if (!navigatingToTable.current) {
         leaveSession();
@@ -52,9 +57,36 @@ export function useHostViewModel() {
   }, []);
 
   const startGame = () => {
-    if (players.length < 2) return;
-    navigatingToTable.current = true;
-    router.replace('/table');
+    if (players.length < 2 || state.gameStarted || !state.hostAccountId) return;
+    const result = dispatch({
+      type: 'game.begun',
+      actorId: state.hostAccountId,
+      intentId: `begin-${Date.now()}`,
+      payload: {},
+    });
+    if (result.ok) {
+      navigatingToTable.current = true;
+      router.replace('/table');
+    }
+  };
+
+  const movePlayer = (playerId: string, direction: -1 | 1) => {
+    if (state.gameStarted || !state.hostAccountId) {
+      return { ok: false as const, error: 'Players can only be reordered before the game starts' };
+    }
+    const index = players.findIndex((player) => player.id === playerId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= players.length) {
+      return { ok: false as const, error: 'Player is already at the edge of the order' };
+    }
+    const playerIds = players.map((player) => player.id);
+    [playerIds[index], playerIds[nextIndex]] = [playerIds[nextIndex], playerIds[index]];
+    return dispatch({
+      type: 'players.reordered',
+      actorId: state.hostAccountId,
+      intentId: `reorder-${Date.now()}-${playerId}-${direction}`,
+      payload: { playerIds },
+    });
   };
 
   const updatePlayerColor = (playerId: string, newColor: string) => {
@@ -78,7 +110,11 @@ export function useHostViewModel() {
     peerCount,
     players,
     availableColors,
-    canStartGame: players.length >= 2,
+    canStartGame: players.length >= 2 && !state.gameStarted,
+    gameStarted: state.gameStarted,
+    canArrangePlayers: !state.gameStarted,
+    hostPlayerId,
+    movePlayer,
     error: lastError,
     isListening: status === 'listening',
     startGame,
@@ -86,5 +122,3 @@ export function useHostViewModel() {
     stopHosting: leaveSession,
   };
 }
-
-
