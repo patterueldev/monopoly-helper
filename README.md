@@ -128,6 +128,13 @@ The iOS workflow compiles and signs locally on `macos-latest` using App Store Co
 
 ## Device Troubleshooting & Compatibility
 
+### In-app updates (Android)
+The app checks for a new version on launch and shows an **Update** banner on the home screen when one is available (tap the version footer anytime to re-check). Tapping Update downloads the APK and opens the Android system installer — confirm there to finish. Notes:
+- **One system tap is unavoidable**: sideloaded apps cannot install silently; only Google Play / device-owner flows can.
+- **"Install unknown apps"**: on first update Android asks you to allow installs from this app. If the installer never appears, use the banner's **Open install settings** button (*Settings -> Apps -> Special app access -> Install unknown apps -> Monopoly Banker -> Allow*).
+- **Signature conflict**: updates install cleanly over previous releases. If you see "App Not Installed", an older copy signed with a different key is on the device — uninstall it first, then update.
+- Samsung Auto Blocker (below) can still block the install; see Issue [#33](https://github.com/patterueldev/monopoly-helper/issues/33).
+
 ### Android 12+ "App Not Installed"
 If sideloading an APK fails on Android 12 (API 31+):
 - **Signature conflict**: If an earlier version of the app (or debug build) was installed with a different key, Android will reject the update. **Uninstall the previous version from the device first**, then install the new APK.
