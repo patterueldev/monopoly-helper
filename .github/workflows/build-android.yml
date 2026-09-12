@@ -6,21 +6,47 @@ on:
 
 permissions:
   contents: write # needed to create GitHub Releases
+  id-token: write # needed for keyless Google Cloud authentication
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+      FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+      FIREBASE_TESTER_GROUP: ${{ secrets.FIREBASE_TESTER_GROUP }}
+      GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+      GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Verify Firebase configuration is present
+        run: |
+          for name in FIREBASE_PROJECT_ID FIREBASE_ANDROID_APP_ID FIREBASE_TESTER_GROUP GCP_WIF_PROVIDER GCP_SERVICE_ACCOUNT; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set in GitHub repository secrets."
+              exit 1
+            fi
+          done
+
+      - name: Authenticate to Google Cloud for Firebase
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.FIREBASE_PROJECT_ID }}
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+          create_credentials_file: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@15.26.0
 
       - name: Setup Java (JDK 17)
         uses: actions/setup-java@v4
@@ -88,6 +114,13 @@ jobs:
             }, null, 2) + '\n');
           "
           cat update.json
+
+      - name: Distribute APK to Firebase App Distribution
+        run: |
+          firebase appdistribution:distribute monopoly-banker-preview.apk \
+            --app "$FIREBASE_ANDROID_APP_ID" \
+            --groups family \
+            --release-notes "Monopoly Banker v${{ steps.manifest.outputs.version }} for Android (commit $GITHUB_SHA)"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

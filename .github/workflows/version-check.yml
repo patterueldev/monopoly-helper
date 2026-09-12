@@ -45,7 +45,7 @@ jobs:
           // A version bump is required only when the PR touches code or build
           // config. Docs-only/CI-only PRs may merge without a bump.
           const codePattern =
-            /^(app\/|src\/|assets\/|app\.json$|package\.json$|eas\.json$|tsconfig\.json$|eslint\.config\.|babel\.config\.|metro\.config\.|index\.|google-services\.json$)/;
+            /^(app\/|src\/|assets\/|app\.json$|package\.json$|eas\.json$|tsconfig\.json$|eslint\.config\.|babel\.config\.|metro\.config\.|index\.)/;
           const changedFiles = execFileSync('git', ['diff', '--name-only', `${process.env.BASE_SHA}...HEAD`], {
             encoding: 'utf8',
           })
@@ -53,16 +53,30 @@ jobs:
             .map((line) => line.trim())
             .filter(Boolean);
           const codeFiles = changedFiles.filter((file) => codePattern.test(file));
-          const needsBump = codeFiles.length > 0;
 
           const currentApp = JSON.parse(fs.readFileSync('app.json', 'utf8')).expo.version;
-          const currentPackage = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+          const currentPackageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const currentPackage = currentPackageJson.version;
           const baseApp = JSON.parse(
             execFileSync('git', ['show', `${process.env.BASE_SHA}:app.json`], { encoding: 'utf8' })
           ).expo.version;
-          const basePackage = JSON.parse(
+          const basePackageJson = JSON.parse(
             execFileSync('git', ['show', `${process.env.BASE_SHA}:package.json`], { encoding: 'utf8' })
-          ).version;
+          );
+          const basePackage = basePackageJson.version;
+
+          // The distribution helper is CI configuration, not an app release.
+          // Permit changing only that script without forcing a version bump.
+          const withoutDistributionScript = (packageJson) => {
+            const copy = JSON.parse(JSON.stringify(packageJson));
+            if (copy.scripts) delete copy.scripts['distribute:android'];
+            return copy;
+          };
+          const packageOnlyCiChange =
+            changedFiles.includes('package.json') &&
+            JSON.stringify(withoutDistributionScript(currentPackageJson)) ===
+              JSON.stringify(withoutDistributionScript(basePackageJson));
+          const needsBump = codeFiles.length > 0 && !packageOnlyCiChange;
 
           const current = parseVersion(currentApp, 'app.json expo.version');
           const currentPackageParts = parseVersion(currentPackage, 'package.json version');

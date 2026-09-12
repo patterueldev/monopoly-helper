@@ -50,8 +50,9 @@ single-device "banker" app).
 7. **CI Android APK build & GitHub Release** (PR #12–#15, #17, #18, Issue #6, #24) —
    - GHA workflow (`build-android.yml`, reusable via `release.yml`) compiles `.apk`
      locally on `ubuntu-latest` via `eas build --local` (0 Expo cloud minutes),
-     uploads the artifact, and publishes to GitHub Releases. Builds run only when
-     a version bump merges to `main` — never on doc-only pushes.
+     uploads the artifact, publishes to GitHub Releases, and uploads the same APK
+     to Firebase App Distribution. Builds run only when a version bump merges to
+     `main` — never on doc-only pushes.
    - `release.yml` uses `concurrency: { group: release-..., cancel-in-progress: false }`
      so an in-flight release is never cancelled by a later merge.
    - Verified live with Release **Android Preview #14**.
@@ -103,6 +104,15 @@ single-device "banker" app).
   inside `eas build --local` succeeds without peer dependency resolution conflicts.
 - **EAS Project**: Linked to project ID `79ce84c4-5868-4ce2-977c-79569035af49`
   under owner `jpteruel95`. Requires `EXPO_TOKEN` secret in GitHub Actions.
+- **Firebase App Distribution**: GitHub Actions uploads Android builds through OIDC
+  Workload Identity Federation using a dedicated service account with
+  `roles/firebaseappdistro.admin`. Store the Firebase project/app IDs, tester group,
+  WIF provider resource, and service-account email in repository secrets named
+  `FIREBASE_PROJECT_ID`, `FIREBASE_ANDROID_APP_ID`, `FIREBASE_TESTER_GROUP`,
+  `GCP_WIF_PROVIDER`, and `GCP_SERVICE_ACCOUNT`; restrict the provider to this
+  repository's `main` branch.
+- **Firebase client config**: `google-services.json` is local and gitignored. It
+  is not needed for App Distribution uploads and is not referenced by `app.json`.
 - **Releases**: Download the latest installable Android APK from:
   `https://github.com/patterueldev/monopoly-helper/releases`
 
