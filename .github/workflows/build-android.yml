@@ -66,13 +66,38 @@ jobs:
           path: monopoly-banker-preview.apk
           retention-days: 14
 
+      - name: Generate update manifest
+        id: manifest
+        run: |
+          version=$(node -p "require('./app.json').expo.version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          tag="build-android-${{ github.run_number }}"
+          apk="monopoly-banker-preview.apk"
+          VERSION="$version" \
+          APK_URL="https://github.com/${{ github.repository }}/releases/download/${tag}/${apk}" \
+          SIZE="$(stat -c%s "$apk")" \
+          SHA256="$(sha256sum "$apk" | cut -d' ' -f1)" \
+          node --input-type=module -e "
+            import { writeFileSync } from 'node:fs';
+            writeFileSync('update.json', JSON.stringify({
+              version: process.env.VERSION,
+              apkUrl: process.env.APK_URL,
+              size: Number(process.env.SIZE),
+              sha256: process.env.SHA256,
+              notes: 'Monopoly Banker ' + process.env.VERSION + ' for Android',
+            }, null, 2) + '\n');
+          "
+          cat update.json
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-android-${{ github.run_number }}
-          name: "Android Preview #${{ github.run_number }}"
+          name: "Android v${{ steps.manifest.outputs.version }} (#${{ github.run_number }})"
           body: |
-            Automated Android APK build from commit ${{ github.sha }} (compiled locally on GitHub Actions runner).
-            Download and sideload `monopoly-banker-preview.apk` on your Android device.
-          files: monopoly-banker-preview.apk
+            Monopoly Banker v${{ steps.manifest.outputs.version }} for Android (commit ${{ github.sha }}, compiled locally on GitHub Actions runner).
+            The app checks for updates itself on launch; or download and sideload `monopoly-banker-preview.apk` manually.
+          files: |
+            monopoly-banker-preview.apk
+            update.json
           make_latest: true

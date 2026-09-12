@@ -1,10 +1,14 @@
 import { Link, router } from 'expo-router';
+import * as Application from 'expo-application';
 import { useState } from 'react';
-import { Modal, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import { useGameStore } from '../src/store/gameStore';
 import { useProfileStore } from '../src/store/profileStore';
 import { colors, PLAYER_PALETTE } from '../src/theme';
 import { DEFAULT_CONFIG, Account } from '../src/ledger/types';
+import { useAppUpdate } from '../src/viewmodels/useAppUpdate';
+import { UpdateBanner } from '../src/components/UpdateBanner';
+import { TestFlightNudge } from '../src/components/TestFlightNudge';
 
 export default function Home() {
   const games = useGameStore((x) => x.listGames)();
@@ -16,6 +20,12 @@ export default function Home() {
   const [hostName, setHostName] = useState(profile?.name ?? '');
   const [hostColor, setHostColor] = useState(profile?.color ?? PLAYER_PALETTE[0]);
   const [hostError, setHostError] = useState<string | null>(null);
+
+  const update = useAppUpdate();
+  const installedVersion = Application.nativeApplicationVersion ?? '?';
+  const showUpdateBanner =
+    Platform.OS === 'android' &&
+    (update.phase === 'error' || (update.manifest !== null && update.phase !== 'idle' && update.phase !== 'checking'));
 
   const openHostSetup = () => {
     setHostName(profile?.name ?? '');
@@ -72,6 +82,23 @@ export default function Home() {
           The table’s money, handled.
         </Text>
 
+        {showUpdateBanner ? (
+          <UpdateBanner
+            phase={update.phase}
+            latestVersion={update.manifest?.version ?? ''}
+            notes={update.manifest?.notes ?? ''}
+            progress={update.progress}
+            error={update.error}
+            onUpdate={update.startDownload}
+            onInstall={update.install}
+            onOpenSettings={update.openUnknownSourcesSettings}
+            onRetry={update.checkNow}
+            onDismiss={update.dismiss}
+          />
+        ) : null}
+
+        {Platform.OS === 'ios' ? <TestFlightNudge version={installedVersion} /> : null}
+
         <Pressable
           onPress={openHostSetup}
           style={{ borderColor: colors.green, borderWidth: 2, padding: 16, borderRadius: 14, alignItems: 'center', backgroundColor: colors.white }}
@@ -99,6 +126,16 @@ export default function Home() {
             ))}
           </View>
         )}
+
+        {Platform.OS === 'android' ? (
+          <Pressable onPress={update.checkNow} style={{ marginTop: 18, alignItems: 'center' }}>
+            <Text style={{ color: colors.muted, fontSize: 13 }}>
+              v{installedVersion}
+              {update.phase === 'checking' ? ' · Checking for updates…' : ' · Tap to check for updates'}
+              {update.notice ? ` · ${update.notice}` : ''}
+            </Text>
+          </Pressable>
+        ) : null}
 
         {/* Host Setup Modal */}
         <Modal
