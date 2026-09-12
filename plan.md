@@ -527,27 +527,25 @@ part of the app's runtime architecture — no Firestore, Auth, or Analytics —
 and does not change anything in Sections 1–12. LAN transport (Section 11)
 remains the only way devices talk to each other during a game.
 
-- Firebase project: `randomprojects-198e3` (existing project, already had
-  an Android app pre-registered here as "Monopoly Banker").
-- Bundle ID unified everywhere to **`dev.patteruel.monopolybanker`**
-  (`app.json` `ios.bundleIdentifier` and `android.package`). This fixed a
-  real mismatch — `app.json` previously had `com.pat.monopolybanker`, which
-  would never have matched the Firebase-registered app.
+- The existing Firebase project has an Android app pre-registered for the
+  application. The Android package identifiers in `app.json` match that app.
 - A local `google-services.json` may exist at the project root, but it remains
   gitignored and is not referenced by `app.json`. It is not required to upload
   an APK to App Distribution; it would only be needed if the app adds Firebase
   Android SDK features such as FCM.
 - `npm run distribute:android -- <path-to-apk>` uploads a build to the
-  `family` tester group via the `firebase` CLI
+  configured tester group via the `firebase` CLI
   (`firebase appdistribution:distribute`). Pair with the existing `preview`
   build profile in `eas.json`, which already builds an installable APK.
 - The Android release workflow uploads the same signed APK to both Firebase
   App Distribution and GitHub Releases. Firebase CI authentication uses a
   dedicated service account through GitHub OIDC Workload Identity Federation;
-  no Firebase token or service-account key is stored in GitHub.
+  no Firebase token or service-account key is stored in GitHub. The project/app
+  IDs, tester group, provider resource, and service-account email are stored as
+  GitHub repository secrets rather than tracked files.
 - **Remaining one-time manual steps:** Open App Distribution for this app in
   the Firebase console (Console → App Distribution → Get started), create the
-  `family` tester group, add testers, and configure the Google Cloud workload
-  identity provider/service-account binding for `patterueldev/monopoly-helper`.
+  tester group, add testers, and configure the Google Cloud workload identity
+  provider/service-account binding for this repository's `main` branch.
 - No iOS app is registered in Firebase yet. When one is needed, register it
   under the same bundle ID and repeat the App Distribution setup for iOS.

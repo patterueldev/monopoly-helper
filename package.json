@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "eas-build-pre-install": "npm config set legacy-peer-deps true",
-    "distribute:android": "firebase appdistribution:distribute --app 1:212760278503:android:0bb3be8ff4c4369ad6b942 --groups family"
+    "distribute:android": "firebase appdistribution:distribute --app \"$FIREBASE_ANDROID_APP_ID\" --groups \"$FIREBASE_TESTER_GROUP\""
   },
   "dependencies": {
     "@expo/ui": "~57.0.16",

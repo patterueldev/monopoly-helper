@@ -104,13 +104,13 @@ single-device "banker" app).
   inside `eas build --local` succeeds without peer dependency resolution conflicts.
 - **EAS Project**: Linked to project ID `79ce84c4-5868-4ce2-977c-79569035af49`
   under owner `jpteruel95`. Requires `EXPO_TOKEN` secret in GitHub Actions.
-- **Firebase App Distribution**: Uses Firebase project `randomprojects-198e3`,
-  Android App ID `1:212760278503:android:0bb3be8ff4c4369ad6b942`, and tester group
-  `family`. GitHub Actions authenticates through OIDC Workload Identity
-  Federation using the dedicated `github-actions-firebase` service account
-  (`roles/firebaseappdistro.admin`); configure the provider to trust only
-  `patterueldev/monopoly-helper` on `main`. Expected provider resource:
-  `projects/212760278503/locations/global/workloadIdentityPools/github/providers/monopoly-helper`.
+- **Firebase App Distribution**: GitHub Actions uploads Android builds through OIDC
+  Workload Identity Federation using a dedicated service account with
+  `roles/firebaseappdistro.admin`. Store the Firebase project/app IDs, tester group,
+  WIF provider resource, and service-account email in repository secrets named
+  `FIREBASE_PROJECT_ID`, `FIREBASE_ANDROID_APP_ID`, `FIREBASE_TESTER_GROUP`,
+  `GCP_WIF_PROVIDER`, and `GCP_SERVICE_ACCOUNT`; restrict the provider to this
+  repository's `main` branch.
 - **Firebase client config**: `google-services.json` is local and gitignored. It
   is not needed for App Distribution uploads and is not referenced by `app.json`.
 - **Releases**: Download the latest installable Android APK from:

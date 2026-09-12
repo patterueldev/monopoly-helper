@@ -13,13 +13,23 @@ jobs:
     runs-on: ubuntu-latest
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      FIREBASE_PROJECT_ID: randomprojects-198e3
-      FIREBASE_ANDROID_APP_ID: 1:212760278503:android:0bb3be8ff4c4369ad6b942
-      GCP_WIF_PROVIDER: projects/212760278503/locations/global/workloadIdentityPools/github/providers/monopoly-helper
-      GCP_SERVICE_ACCOUNT: github-actions-firebase@randomprojects-198e3.iam.gserviceaccount.com
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+      FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+      FIREBASE_TESTER_GROUP: ${{ secrets.FIREBASE_TESTER_GROUP }}
+      GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+      GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Verify Firebase configuration is present
+        run: |
+          for name in FIREBASE_PROJECT_ID FIREBASE_ANDROID_APP_ID FIREBASE_TESTER_GROUP GCP_WIF_PROVIDER GCP_SERVICE_ACCOUNT; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set in GitHub repository secrets."
+              exit 1
+            fi
+          done
 
       - name: Authenticate to Google Cloud for Firebase
         uses: google-github-actions/auth@v3
