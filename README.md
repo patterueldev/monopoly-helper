@@ -96,21 +96,33 @@ npm start
 
 Both Android and iOS builds are fully automated via GitHub Actions using **local runner compilation** (`eas build --local`), consuming **0 Expo cloud build minutes**.
 
-### Android Build (`.github/workflows/build-android.yml`)
-- Runs on `ubuntu-latest` on every push to `main` (skipping doc-only changes).
-- Builds a standalone universal `.apk` locally using Android SDK / Gradle.
-- Includes workflow `concurrency` cancellation (`cancel-in-progress: true`) to immediately cancel superseded builds on rapid merges.
-- Automatically publishes the compiled `.apk` to **GitHub Releases**.
-- **Download**: [Latest Android APK Releases](https://github.com/patterueldev/monopoly-helper/releases).
+### CI (`.github/workflows/ci.yml`)
+- Runs on every pull request targeting `main`.
+- Gates the merge on `npm test`, `npm run typecheck`, and `npm run lint`.
+- Superseded runs are cancelled automatically (`cancel-in-progress`).
 
-### iOS TestFlight Build (`.github/workflows/build-ios.yml`)
-- Runs on `macos-latest` on manual workflow dispatch (`workflow_dispatch`).
-- Compiles a signed production `.ipa` locally using Xcode.
-- Signs with App Store Connect credentials stored securely in GitHub Secrets:
-  - `ASC_KEY_ID`: App Store Connect API Key ID
-  - `ASC_ISSUER_ID`: App Store Connect Issuer UUID
-  - `ASC_PRIVATE_KEY`: App Store Connect AuthKey (`.p8` private key)
-- Uploads directly to **Apple TestFlight** from the runner using `xcrun altool --upload-app`.
+### Release version gate (`.github/workflows/version-check.yml`)
+- Runs on every pull request targeting `main`.
+- A version bump is **required** when the PR touches app code or build config (`app/`, `src/`, `assets/`, `app.json`, `package.json`, `eas.json`, toolchain configs, `google-services.json`).
+- Docs-only / CI-only PRs may merge without a bump; a bump is still accepted if present.
+- When required, `app.json` (`expo.version`) and `package.json` (`version`) must match and be strictly higher than the version on `main`.
+- `.github/workflows/tag-version.yml` creates an immutable `vX.Y.Z` git tag after a merge to `main` (or skips if the version is unchanged).
+
+### Release builds (`.github/workflows/release.yml`)
+- Runs on every push to `main` and detects whether `app.json`'s version changed.
+- When a version bump merged, it calls **both** build workflows in parallel — never cancels an in-flight release:
+  - Android → installable APK published to **GitHub Releases**.
+  - iOS → signed production IPA uploaded directly to **Apple TestFlight** (no GitHub Release; the IPA is kept as a 14-day workflow artifact for debugging).
+- Merges without a version bump build nothing.
+- Both build workflows (`.github/workflows/build-android.yml`, `.github/workflows/build-ios.yml`) are also manually dispatchable; iOS accepts a `production`/`preview` profile and an optional TestFlight upload flag.
+
+### iOS signing secrets
+The iOS workflow compiles and signs locally on `macos-latest` using App Store Connect credentials stored in GitHub Secrets:
+- `ASC_KEY_ID`: App Store Connect API Key ID
+- `ASC_ISSUER_ID`: App Store Connect Issuer UUID
+- `ASC_PRIVATE_KEY`: App Store Connect AuthKey (`.p8` private key)
+- Uploads to **Apple TestFlight** from the runner using `xcrun altool --upload-app`.
+- **Download**: [Latest Android APK Releases](https://github.com/patterueldev/monopoly-helper/releases). iOS builds go to TestFlight only — no iOS GitHub Releases.
 
 ---
 

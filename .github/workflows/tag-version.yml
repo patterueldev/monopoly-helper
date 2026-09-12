@@ -34,8 +34,8 @@ jobs:
           if git rev-parse "$tag" >/dev/null 2>&1; then
             tagged_sha=$(git rev-list -n 1 "$tag")
             if [ "$tagged_sha" != "$GITHUB_SHA" ]; then
-              echo "$tag already points to $tagged_sha, not $GITHUB_SHA"
-              exit 1
+              echo "$tag already exists (points to $tagged_sha); version unchanged, skipping"
+              exit 0
             fi
             echo "$tag already points to this commit"
             exit 0

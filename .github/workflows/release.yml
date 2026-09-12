@@ -1,0 +1,59 @@
+name: Release builds
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # needed to create Android GitHub Releases
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # never cancel an in-flight release
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.detect.outputs.changed }}
+      version: ${{ steps.detect.outputs.version }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect version bump
+        id: detect
+        run: |
+          version=$(node -p "require('./app.json').expo.version")
+          before="${{ github.event.before }}"
+          if [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            prev=""
+          else
+            prev=$(git show "$before:app.json" 2>/dev/null \
+              | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).expo.version" 2>/dev/null || echo "")
+          fi
+          if [ -z "$prev" ] || [ "$prev" != "$version" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Version bump detected: ${prev:-<none>} -> $version"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Version unchanged ($version); skipping builds."
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build-android:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    uses: ./.github/workflows/build-android.yml
+    secrets: inherit
+
+  build-ios:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    uses: ./.github/workflows/build-ios.yml
+    with:
+      build_profile: production
+      upload_to_testflight: true
+    secrets: inherit

@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: version-check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   version:
     runs-on: ubuntu-latest
@@ -18,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Require a higher SemVer release version
+      - name: Require a higher SemVer release version for code changes
         run: |
           node <<'NODE'
           const { execFileSync } = require('node:child_process');
@@ -37,6 +41,19 @@ jobs:
             }
             return 0;
           };
+
+          // A version bump is required only when the PR touches code or build
+          // config. Docs-only/CI-only PRs may merge without a bump.
+          const codePattern =
+            /^(app\/|src\/|assets\/|app\.json$|package\.json$|eas\.json$|tsconfig\.json$|eslint\.config\.|babel\.config\.|metro\.config\.|index\.|google-services\.json$)/;
+          const changedFiles = execFileSync('git', ['diff', '--name-only', `${process.env.BASE_SHA}...HEAD`], {
+            encoding: 'utf8',
+          })
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+          const codeFiles = changedFiles.filter((file) => codePattern.test(file));
+          const needsBump = codeFiles.length > 0;
 
           const currentApp = JSON.parse(fs.readFileSync('app.json', 'utf8')).expo.version;
           const currentPackage = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
@@ -58,10 +75,23 @@ jobs:
           if (baseApp !== basePackage) {
             throw new Error(`main has mismatched versions: app.json (${baseApp}) and package.json (${basePackage})`);
           }
-          if (compare(current, base) <= 0 || compare(currentPackageParts, basePackageParts) <= 0) {
-            throw new Error(`PR version ${currentApp} must be higher than main version ${baseApp}`);
+
+          if (needsBump) {
+            if (compare(current, base) <= 0 || compare(currentPackageParts, basePackageParts) <= 0) {
+              throw new Error(
+                `This PR touches code (${codeFiles.join(', ')}) so its version ${currentApp} must be higher ` +
+                  `than main version ${baseApp}`
+              );
+            }
+            console.log(`Code changed; version ${currentApp} is valid and higher than main's ${baseApp}.`);
+          } else {
+            if (compare(current, base) < 0 || compare(currentPackageParts, basePackageParts) < 0) {
+              throw new Error(`Version downgrade is not allowed: PR version ${currentApp} < main version ${baseApp}`);
+            }
+            if (currentApp !== baseApp) {
+              console.log(`Non-code change with optional version bump ${baseApp} -> ${currentApp}; accepted.`);
+            } else {
+              console.log('Non-code change with no version bump; accepted.');
+            }
           }
-
-          console.log(`Version ${currentApp} is valid and higher than main's ${baseApp}.`);
           NODE
-
