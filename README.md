@@ -12,9 +12,24 @@ Monopoly Banker replaces physical paper cash and the banker's mental arithmetic 
 - **Zero-Config LAN Multiplayer**: Fast parallel subnet scanning (`/24` subnet on port `51837` via native TCP sockets). Players tap "Join Game" and automatically see host tables nearby on the same Wi-Fi network.
 - **1-Tap Host Setup & Live Lobby**: Host sets their player profile and opens a live lobby. Starts automatically when 2+ players join over Wi-Fi.
 - **Smart Color Conflict Resolution**: Prevents duplicate player token colors upon joining with an interactive color selection card to choose from remaining available colors.
-- **Turn & Jail Tracking (Advisory)**: Turn advancement indicator, jailed/released status toggles, and advisory rent calculator presets.
+- **Turn & Jail Tracking (Advisory)**: Turn advancement indicator, jailed/released status with lock badges and dimmed tokens. Any player can send themselves to Jail (or walk out); only the Banker can jail or release others.
+- **Instant Bank Collection**: The Banker's "Collect for Bank" posts an immediate transfer — no payer approval step. Player-to-player requests still need approval.
+- **QR Join**: The host lobby shows a scan-to-join QR code; joiners tap "Scan host QR code" instead of typing IP/port when auto-discovery misses the table.
+- **Connection Reports**: A timestamped connection log feeds an in-app report (app/device, status, local IP, tables seen, log) shared through the OS share sheet — no account, no backend.
+- **Turn & Event Sounds**: Distinct bells with haptics for your turn, being jailed, and collecting from the Bank (mutable on the Table screen; respects the OS silent switch).
 - **Endgame Settlement & Standings**: Supports both rapid cash settlement and full itemized property/houses/hotels/mortgages net worth calculation to determine the winner.
 - **Persistent Player Profile**: Player name and token color saved locally across sessions using MMKV storage.
+- **Planned (not built)**: joining a table over Bluetooth instead of Wi-Fi — tracked as a future feature.
+
+---
+
+## Joining & Connection Troubleshooting
+
+- **Host not detected?** First rescan, then tap **"Scan host QR code"** on the Join screen and point the camera at the QR code on the host's lobby. Manual IP entry remains as a last resort.
+- **iOS Local Network permission**: iOS 14+ asks for local-network access on first join/host. If a player can't see or reach the table, check *Settings → Monopoly Banker → Local Network* is ON (reinstalling re-triggers the prompt).
+- **Same network, no guest Wi-Fi**: host and joiners must be on the same router subnet — guest networks and AP/client isolation block device-to-device TCP even when the internet works.
+- **Report a connection issue**: on a failed join, tap **"Report a connection issue"** (or tap the red/yellow connection banner → **Help**). Review the report and **Share** it to Messages, Messenger, Mail, or anywhere else — it carries app/device info, connection status, your local-network address, tables your phone detected, and the recent connection log. Nothing leaves the phone until you share it.
+- **Sounds**: Table-screen toggle mutes/unmutes. On iOS the bells follow the silent switch; turn silent off (or raise volume) if you hear nothing.
 
 ---
 
@@ -36,14 +51,25 @@ src/
 │   └── persistence.ts     # MMKV local storage adapters
 ├── transport/       # [Networking] TCP socket and LAN discovery transport
 │   ├── discovery.ts       # Subnet scanner & ping broadcast logic
+│   ├── joinQr.ts          # QR join encode/decode (pure)
 │   ├── HostTransport.ts   # Host TCP server handling client connections
 │   ├── ClientTransport.ts # Client TCP connection to host
 │   └── Transport.ts       # Common transport interface & NDJSON framing
+├── audio/           # [Audio] Pure event→cue mapping (expo-audio playback lives in viewmodels)
+│   └── cues.ts            # your_turn / jailed / bank_received detection
+├── diagnostics/     # [Diagnostics] Ring-buffer log, last-seen hosts, report formatter (pure)
+│   ├── logBuffer.ts
+│   ├── lastSeen.ts
+│   └── formatReport.ts
 ├── viewmodels/      # [ViewModel - Hooks] Screen-specific logic & presentation state
 │   ├── useHostViewModel.ts
 │   ├── useJoinViewModel.ts
+│   ├── useDiagnostics.ts    # Report assembly + OS share sheet
+│   ├── useGameAudio.ts      # Foreground-only sound/haptic playback
 │   └── useSettlementViewModel.ts
 └── components/      # Reusable UI elements (Buttons, Cards, ColorPickers, Modals)
+
+assets/sounds/        # Bundled turn/jail/bank bells (synthesized, repo-owned)
 
 app/                 # [View] Expo Router navigation screens
 ├── index.tsx        # Home screen (Profile, Host Game, Join Game, Solo mode)
