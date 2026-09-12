@@ -260,6 +260,19 @@ describe('multiplayer lobby & dynamic player joining', () => {
     expect(circulation(s)).toBe(3000);
   });
 
+  it('reorders players before the host begins the game', () => {
+    const hostOnly = makeEvent('game.started', { config: DEFAULT_CONFIG, accounts: [bank, p('host', '#3498db')], hostAccountId: 'host' }, 'bank', 0, 'host-start');
+    const player2Join = makeEvent('player.joined', { account: p('player2', '#e74c3c') }, 'bank', 1, 'join-p2');
+    const reorder = makeEvent('players.reordered', { playerIds: ['player2', 'host'] }, 'host', 2, 'reorder-players');
+    const begin = makeEvent('game.begun', {}, 'host', 3, 'begin-game');
+    const s = fold([hostOnly, player2Join, reorder, begin]);
+    expect(s.invalid).toBe(false);
+    expect(Object.values(s.accounts).filter((account) => account.kind === 'player').map((account) => account.id)).toEqual(['player2', 'host']);
+    expect(s.currentTurnAccountId).toBe('player2');
+    expect(s.gameStarted).toBe(true);
+    expect(applyEvent(s, makeEvent('players.reordered', { playerIds: ['host', 'player2'] }, 'host', 4, 'late-reorder')).invalid).toBe(true);
+  });
+
   it('rejects player.joined with conflicting/duplicate color', () => {
     const hostOnly = makeEvent('game.started', { config: DEFAULT_CONFIG, accounts: [bank, p('host', '#3498db')] }, 'bank', 0, 'host-start');
     const duplicateColorJoin = makeEvent('player.joined', { account: p('player2', '#3498db') }, 'bank', 1, 'join-p2-conflict');

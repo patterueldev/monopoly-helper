@@ -112,7 +112,7 @@ export default function Host() {
 
                     <View
                       style={{
-                        backgroundColor: idx === 0 ? colors.green : colors.border,
+                        backgroundColor: player.id === vm.hostPlayerId ? colors.green : colors.border,
                         paddingHorizontal: 10,
                         paddingVertical: 4,
                         borderRadius: 8,
@@ -120,15 +120,34 @@ export default function Host() {
                     >
                       <Text
                         style={{
-                          color: idx === 0 ? colors.white : colors.muted,
+                          color: player.id === vm.hostPlayerId ? colors.white : colors.muted,
                           fontSize: 12,
                           fontWeight: '800',
                         }}
                       >
-                        {idx === 0 ? 'HOST (YOU)' : 'CONNECTED'}
+                        {player.id === vm.hostPlayerId ? 'HOST (YOU)' : 'CONNECTED'}
                       </Text>
                     </View>
                   </View>
+
+                  {vm.canArrangePlayers ? (
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <Pressable
+                        disabled={idx === 0}
+                        onPress={() => vm.movePlayer(player.id, -1)}
+                        style={{ opacity: idx === 0 ? 0.35 : 1, paddingVertical: 4 }}
+                      >
+                        <Text style={{ color: colors.green, fontSize: 13, fontWeight: '800' }}>↑ Move up</Text>
+                      </Pressable>
+                      <Pressable
+                        disabled={idx === vm.players.length - 1}
+                        onPress={() => vm.movePlayer(player.id, 1)}
+                        style={{ opacity: idx === vm.players.length - 1 ? 0.35 : 1, paddingVertical: 4 }}
+                      >
+                        <Text style={{ color: colors.green, fontSize: 13, fontWeight: '800' }}>↓ Move down</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
 
                   {/* Inline Color Chooser if user is editing this player's color */}
                   {isEditing && vm.availableColors.length > 0 ? (
@@ -199,4 +218,3 @@ export default function Host() {
     </SafeAreaView>
   );
 }
-

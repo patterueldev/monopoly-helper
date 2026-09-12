@@ -4,9 +4,22 @@ export const circulation = (s: GameState) => Object.entries(s.accounts).reduce((
 export const netWorth = (s: GameState, id: string) => balance(s, id);
 export const activePlayers = (s: GameState) => Object.values(s.accounts).filter(a => a.kind === 'player' && !s.eliminated.has(a.id));
 export const isJailed = (s: GameState, id: string) => s.jailed?.has(id) ?? false;
-/** The Banker is the Host's player account; undefined when no host is set
+/** The Host's player account, which is also the Banker; undefined when no host is set
  * (legacy/dev single-device games have no banker). */
 export const bankerAccountId = (s: GameState): string | undefined => s.hostAccountId;
+/** New games persist an explicit lobby-to-play transition. Older hosted games
+ * predate that event, so infer that they have begun once gameplay is present. */
+export const isGameStarted = (s: GameState): boolean =>
+  s.gameStarted || !s.hostAccountId || s.events.some((event) =>
+    event.type === 'transfer' ||
+    event.type === 'transfer.reversed' ||
+    event.type === 'player.eliminated' ||
+    event.type === 'turn.advanced' ||
+    event.type === 'player.jailed' ||
+    event.type === 'player.released' ||
+    event.type === 'request.created' ||
+    event.type === 'request.resolved'
+  );
 /** Money that left play with no creditor (e.g. elimination with unclear destination). */
 export const lostInCirculation = (s: GameState) => s.lostInCirculation ?? 0;
 /** Authoritative final standings once the game has ended, sorted by rank.

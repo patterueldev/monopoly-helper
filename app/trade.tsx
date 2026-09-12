@@ -15,6 +15,7 @@ import { useGameStore } from '../src/store/gameStore';
 import { useProfileStore } from '../src/store/profileStore';
 import { colors } from '../src/theme';
 import { buildTransfer } from '../src/ledger/intents';
+import { DEFAULT_QUICK_AMOUNTS } from '../src/ledger/types';
 
 const validAmount = (value: number) => Number.isSafeInteger(value) && value > 0;
 
@@ -39,12 +40,12 @@ function AmountField({ label, value, onChange, quickAmounts }: { label: string; 
           borderWidth: 1,
         }}
       />
-      <View style={{ flexDirection: 'row', gap: 5 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
         {quickAmounts.map((n) => (
           <Pressable
             key={n}
             onPress={() => bump(n)}
-            style={{ flex: 1, paddingVertical: 9, backgroundColor: '#EDE4D1', borderRadius: 8, alignItems: 'center' }}
+            style={{ width: '23%', paddingVertical: 9, backgroundColor: '#EDE4D1', borderRadius: 8, alignItems: 'center' }}
           >
             <Text style={{ fontWeight: '700', fontSize: 13 }}>+{n}</Text>
           </Pressable>
@@ -70,7 +71,8 @@ export default function Trade() {
   const [give, setGive] = useState('');
   const [receive, setReceive] = useState('');
 
-  const quickAmounts = state.config?.quickAmounts ?? [1, 10, 20, 50, 100, 200, 500];
+  // Older saved games may still carry the previous seven-button config.
+  const quickAmounts = Array.from(new Set([...(state.config?.quickAmounts ?? DEFAULT_QUICK_AMOUNTS), 5])).sort((a, b) => a - b);
   const from = myAccount?.id ?? '';
   const partner = partners.find((p) => p.id === partnerId);
 

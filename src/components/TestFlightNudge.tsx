@@ -4,7 +4,9 @@ import { colors } from '../theme';
 /** iOS cannot check TestFlight builds programmatically and cannot install
  * them itself, so this is a nudge: version display + a shortcut that opens
  * the TestFlight app, which auto-updates and notifies on its own. */
-export function TestFlightNudge({ version }: { version: string }) {
+export function TestFlightNudge({ version, expectedVersion }: { version: string; expectedVersion?: string | null }) {
+  if (expectedVersion && version === expectedVersion) return null;
+
   const openTestFlight = () => {
     void Linking.openURL('itms-beta://');
   };

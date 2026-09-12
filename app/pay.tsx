@@ -19,15 +19,14 @@ import { useConnectionStore } from '../src/store/connectionStore';
 import { bankerAccountId } from '../src/ledger/selectors';
 import { colors } from '../src/theme';
 import { buildRequest, buildTransfer } from '../src/ledger/intents';
-import { TransferReason } from '../src/ledger/types';
+import { DEFAULT_QUICK_AMOUNTS, TransferReason } from '../src/ledger/types';
 
-type ReasonKind = 'rent' | 'trade' | 'buy' | 'station' | 'other';
+type ReasonKind = 'rent' | 'trade' | 'buy' | 'other';
 
 const REASONS: Array<{ kind: ReasonKind; label: string }> = [
   { kind: 'rent', label: 'Rent' },
   { kind: 'trade', label: 'Trade' },
   { kind: 'buy', label: 'Buy' },
-  { kind: 'station', label: 'Station' },
   { kind: 'other', label: 'Other' },
 ];
 
@@ -75,6 +74,9 @@ export default function Pay() {
   const [reason, setReason] = useState<ReasonKind>(initialReason);
   const [amount, setAmount] = useState('');
   const [amountHistory, setAmountHistory] = useState<string[]>([]);
+  // Older saved games may still carry the previous seven-button config. Keep
+  // the new +5 shortcut available without requiring a new game.
+  const quickAmounts = Array.from(new Set([...(state.config?.quickAmounts ?? DEFAULT_QUICK_AMOUNTS), 5])).sort((a, b) => a - b);
 
   const amountInputAccessoryId = 'pay-amount-input-accessory';
 
@@ -254,13 +256,13 @@ export default function Pay() {
             </Pressable>
           </View>
 
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
-            {(state.config?.quickAmounts ?? [1, 10, 20, 50, 100, 200, 500]).map((n) => (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {quickAmounts.map((n) => (
               <Pressable
                 key={n}
                 onPress={() => changeAmount(Number(amount || 0) + n)}
                 style={{
-                  flex: 1,
+                  width: '23%',
                   padding: 12,
                   backgroundColor: '#EDE4D1',
                   borderRadius: 9,

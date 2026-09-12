@@ -19,7 +19,7 @@ export interface HandleInboundContext {
   eventsAfter: (sinceSeq: number) => GameEvent[];
 }
 
-const HOST_ONLY_INTENT_TYPES = new Set(['settlement.started', 'settlement.dismissed', 'game.ended', 'player.jailed', 'player.released']);
+const HOST_ONLY_INTENT_TYPES = new Set(['players.reordered', 'game.begun', 'settlement.started', 'settlement.dismissed', 'game.ended', 'player.jailed', 'player.released']);
 
 /** Banker-only intents a client may never submit: settlement controls, game end,
  * jail/release, any transfer issued by the Bank (e.g. Pass GO), and payment

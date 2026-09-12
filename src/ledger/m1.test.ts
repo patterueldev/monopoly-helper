@@ -61,7 +61,6 @@ describe('M1 deterministic replay', () => {
 
 describe('game config defaults (T-004)', () => {
   it('offers small denominations in the default quick amounts', () => {
-    for (const n of [1, 10, 20]) expect(DEFAULT_CONFIG.quickAmounts).toContain(n);
-    expect(DEFAULT_CONFIG.quickAmounts.length).toBeGreaterThan(4);
+    expect(DEFAULT_CONFIG.quickAmounts).toEqual([1, 5, 10, 20, 50, 100, 200, 500]);
   });
 });

@@ -1,9 +1,11 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors } from '../src/theme';
 import { DiscoveredHost } from '../src/transport/discovery';
 import { QrScannerModal } from '../src/components/QrScannerModal';
+import { isGameStarted } from '../src/ledger/selectors';
+import { useGameStore } from '../src/store/gameStore';
 import { useJoinViewModel } from '../src/viewmodels/useJoinViewModel';
 
 export default function Join() {
@@ -12,6 +14,12 @@ export default function Join() {
   const [showScanner, setShowScanner] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [altColor, setAltColor] = useState<string | null>(null);
+  const gameStarted = useGameStore((s) => isGameStarted(s.state));
+  const [joined, setJoined] = useState(false);
+
+  useEffect(() => {
+    if (joined && gameStarted) router.replace('/table');
+  }, [joined, gameStarted]);
 
   // Sync default altColor when conflict occurs
   const conflictColors = vm.colorConflict?.availableColors;
@@ -21,14 +29,14 @@ export default function Join() {
   const onJoinDiscovered = async (dh: DiscoveredHost) => {
     const result = await vm.connectToHost(dh);
     if (result.ok) {
-      router.replace('/table');
+      setJoined(true);
     }
   };
 
   const onConnectManual = async () => {
     const result = await vm.connect();
     if (result.ok) {
-      router.replace('/table');
+      setJoined(true);
     }
   };
 
@@ -37,7 +45,7 @@ export default function Join() {
     setShowScanner(false);
     const result = await vm.connectToQr(text);
     if (result.ok) {
-      router.replace('/table');
+      setJoined(true);
     } else if (!('conflict' in result && result.conflict)) {
       setScanError(result.error);
     }
@@ -47,12 +55,21 @@ export default function Join() {
     if (!selectedAltColor) return;
     const result = await vm.resolveColorConflict(selectedAltColor);
     if (result.ok) {
-      router.replace('/table');
+      setJoined(true);
     }
   };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
+      {joined && !gameStarted ? (
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 14 }}>
+          <Text style={{ fontSize: 32, fontWeight: '900', color: colors.green }}>You’re in the lobby</Text>
+          <Text style={{ color: colors.muted, fontSize: 17, lineHeight: 24 }}>
+            Your name is ready. The host will let everyone into the table when the game starts.
+          </Text>
+          <ActivityIndicator size="small" color={colors.green} />
+        </View>
+      ) : (
       <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }} keyboardShouldPersistTaps="handled">
         <View style={{ gap: 4 }}>
           <Text style={{ fontSize: 32, fontWeight: '900', color: colors.green }}>Join a game</Text>
@@ -415,6 +432,7 @@ export default function Join() {
 
         <QrScannerModal visible={showScanner} onScanned={onScannedQr} onClose={() => setShowScanner(false)} />
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
