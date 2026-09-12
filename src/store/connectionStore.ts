@@ -4,6 +4,7 @@ import { useGameStore, createGameStore } from './gameStore';
 import { HostTransport } from '../transport/HostTransport';
 import { ClientTransport, ConnectionState } from '../transport/ClientTransport';
 import { DEFAULT_PORT } from '../transport/wireProtocol';
+import { log } from '../diagnostics/logBuffer';
 
 declare const require: (name: string) => any;
 const uuid = () => { try { return require('expo-crypto').randomUUID(); } catch { return `device-${Date.now()}-${Math.random()}`; } };
@@ -63,10 +64,12 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
         await transport.listen(port);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Couldn't start hosting";
+        log('session', 'error', 'failed to start hosting', message);
         set({ status: 'error', lastError: message });
         return { ok: false, error: message };
       }
       hostTransport = transport;
+      log('session', 'info', `hosting on port ${port}`);
       store.getState().attachTransport(transport, 'host', { onHostEvent: (event: GameEvent) => transport.broadcastEvent(event) });
       set({ role: 'host', status: 'listening', peerCount: transport.connectedPeerCount, lastError: null });
       peerPollTimer = setInterval(() => set({ peerCount: transport.connectedPeerCount }), 2000);
@@ -75,6 +78,7 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
 
     joinGame: async (host, port = DEFAULT_PORT) => {
       const transport = new ClientTransport();
+      log('session', 'info', `joining ${host}:${port}`);
       transport.onConnectionStateChange(state => {
         set({ status: state });
         if (state === 'disconnected') set({ lastError: 'Lost connection to host' });
@@ -91,6 +95,7 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
       } catch (error) {
         transport.close();
         const message = error instanceof Error ? error.message : 'Could not connect';
+        log('session', 'error', `join ${host}:${port} failed`, message);
         set({ status: 'error', lastError: message });
         return { ok: false, error: message };
       }

@@ -4,8 +4,19 @@ import { Intent } from '../ledger/intents';
 import { Transport } from './Transport';
 import { ConnectionState, canSubmit, initialClientConnectionState, reduceClientConnection } from './clientConnection';
 import { DEFAULT_PORT, LineBuffer, PROTOCOL_VERSION, WireMessage, decodeLine, encodeMessage } from './wireProtocol';
+import { log } from '../diagnostics/logBuffer';
 
 export type { ConnectionState } from './clientConnection';
+
+const messageOf = (err: unknown): string => {
+  if (err instanceof Error) return err.message || err.name;
+  if (typeof err === 'string') return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return 'unknown socket error';
+  }
+};
 
 const RECONNECT_INTERVAL_MS = 3000;
 const CONNECT_TIMEOUT_MS = 8000; // plan §5.10: a bad join attempt times out, never hangs
@@ -98,13 +109,14 @@ export class ClientTransport implements Transport {
 
   private dial(): Promise<{ gameId: string; events: GameEvent[] }> {
     return new Promise((resolve, reject) => {
+      log('connect', 'info', `dialing ${this.host}:${this.port}`);
       const socket = TcpSocket.createConnection({ port: this.port, host: this.host }, () => {
         socket.write(encodeMessage({ kind: 'hello', protocolVersion: PROTOCOL_VERSION, clientId: this.clientId, sinceSeq: this.sinceSeq }));
       });
       this.socket = socket;
       this.buffer = new LineBuffer();
 
-      this.connectTimeoutTimer = setTimeout(() => { socket.destroy(); reject(new Error('Connection timed out')); }, CONNECT_TIMEOUT_MS);
+      this.connectTimeoutTimer = setTimeout(() => { log('connect', 'error', `connect to ${this.host}:${this.port} timed out`, `${CONNECT_TIMEOUT_MS}ms without welcome`); socket.destroy(); reject(new Error('Connection timed out')); }, CONNECT_TIMEOUT_MS);
 
       const onWelcome = (gameId: string, events: GameEvent[]) => {
         if (this.connectTimeoutTimer) clearTimeout(this.connectTimeoutTimer);
@@ -115,8 +127,8 @@ export class ClientTransport implements Transport {
       this.pendingWelcomeReject = reject;
 
       socket.on('data', (chunk: string | Buffer) => this.onData(chunk));
-      socket.on('close', () => this.onLost());
-      socket.on('error', () => this.onLost());
+      socket.on('close', () => this.onLost('socket closed'));
+      socket.on('error', (err: unknown) => this.onLost(`socket error: ${messageOf(err)}`));
     });
   }
 
@@ -140,6 +152,7 @@ export class ClientTransport implements Transport {
       case 'welcome':
         this.welcomeEvents = message.events;
         this.startHeartbeat();
+        log('connect', 'info', `connected to ${this.host}:${this.port}`, `welcome with ${message.events.length} events`);
         this.transition({ type: 'welcomed' });
         if (this.pendingWelcome) {
           // First connect: the caller (connectionStore) is awaiting connect()'s
@@ -174,6 +187,7 @@ export class ClientTransport implements Transport {
         this.socket?.write(encodeMessage({ kind: 'pong' }));
         break;
       case 'error':
+        log('protocol', 'warn', 'host sent error', message.message);
         this.pendingWelcomeReject?.(new Error(message.message));
         this.pendingWelcomeReject = null;
         this.socket?.destroy();
@@ -183,15 +197,21 @@ export class ClientTransport implements Transport {
     }
   }
 
-  private onLost() {
+  private onLost(reason = 'unknown') {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
     this.pendingWelcomeReject?.(new Error('Connection lost'));
     this.pendingWelcomeReject = null;
     for (const pending of this.pendingSubmits.values()) pending.reject(new Error('Connection lost'));
     this.pendingSubmits.clear();
+    log('socket', 'warn', 'connection lost', reason);
     this.transition({ type: 'lost' });
-    if (this.state.connectionState === 'reconnecting') this.scheduleReconnect();
+    if (this.state.connectionState === 'reconnecting') {
+      log('connect', 'info', `reconnecting to ${this.host}:${this.port}`, `attempt ${this.state.attempts}`);
+      this.scheduleReconnect();
+    } else if (this.state.connectionState === 'disconnected') {
+      log('connect', 'error', 'gave up reconnecting', `${this.state.attempts} attempts`);
+    }
   }
 
   private scheduleReconnect() {
@@ -205,7 +225,7 @@ export class ClientTransport implements Transport {
   private startHeartbeat() {
     this.lastPongAt = Date.now();
     this.heartbeatTimer = setInterval(() => {
-      if (Date.now() - this.lastPongAt > PONG_TIMEOUT_MS) { this.socket?.destroy(); return; }
+      if (Date.now() - this.lastPongAt > PONG_TIMEOUT_MS) { log('heartbeat', 'warn', 'no pong from host for 15s; dropping connection'); this.socket?.destroy(); return; }
       this.socket?.write(encodeMessage({ kind: 'ping' }));
     }, HEARTBEAT_INTERVAL_MS);
   }
