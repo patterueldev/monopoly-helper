@@ -17,6 +17,8 @@ export default function Table() {
   const settlementStarted = useGameStore((x) => x.state.settlementStarted);
   const ended = useGameStore((x) => x.state.ended);
   const findMyAccount = useProfileStore((x) => x.findMyAccount);
+  const soundEnabled = useProfileStore((x) => x.soundEnabled);
+  const setSoundEnabled = useProfileStore((x) => x.setSoundEnabled);
   const role = useConnectionStore((x) => x.role);
   const settlement = useSettlementViewModel();
   const myAccount = findMyAccount(state.accounts);
@@ -72,6 +74,18 @@ export default function Table() {
     });
   };
 
+  // Any player may send themselves to Jail (or walk out) without the banker.
+  const toggleSelfJail = (id: string) => {
+    if (!myAccount || myAccount.id !== id) return;
+    const jailed = isJailed(state, id);
+    dispatch({
+      type: jailed ? 'player.released' : 'player.jailed',
+      actorId: id,
+      intentId: `jail-self-${Date.now()}-${id}`,
+      payload: { accountId: id },
+    });
+  };
+
   const onPlayerPress = (p: typeof players[0]) => {
     const jailed = isJailed(state, p.id);
     Alert.alert(p.name, `${state.config?.currencySymbol}${balance(state, p.id).toLocaleString()} · ${jailed ? 'In Jail' : 'Active'}`, [
@@ -81,6 +95,9 @@ export default function Table() {
       ...(myAccount && p.id !== myAccount.id ? [{ text: 'Request money', onPress: () => router.push({ pathname: '/pay', params: { mode: 'request', to: p.id } }) }] : []),
       ...(isBanker ? [{ text: 'Pay from Bank', onPress: () => router.push({ pathname: '/pay', params: { to: p.id, from: 'bank' } }) }] : []),
       ...(isBanker ? [{ text: jailed ? 'Release from Jail' : 'Send to Jail', onPress: () => toggleJail(p.id) }] : []),
+      // The banker uses their own authority above (even for themselves); everyone
+      // else gets a self-service jail option on their own row.
+      ...(myAccount && p.id === myAccount.id && !isBanker ? [{ text: jailed ? 'Get out of Jail' : 'Go to Jail', onPress: () => toggleSelfJail(p.id) }] : []),
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
@@ -159,7 +176,22 @@ export default function Table() {
                   borderWidth: isTurn ? 2 : 1,
                 }}
               >
-                <View style={{ width: 16, height: 16, borderRadius: 8, marginRight: 12, backgroundColor: p.color }} />
+                <View
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    marginRight: 12,
+                    backgroundColor: p.color,
+                    borderColor: jailed ? colors.red : 'transparent',
+                    borderWidth: jailed ? 2 : 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: jailed ? 0.7 : 1,
+                  }}
+                >
+                  {jailed ? <Text style={{ fontSize: 10 }}>🔒</Text> : null}
+                </View>
                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <Text style={{ fontSize: 18, fontWeight: '700' }}>{p.name}</Text>
                   {isMe ? (
@@ -267,6 +299,12 @@ export default function Table() {
             <Text style={{ color: colors.green, fontWeight: '800', fontSize: 16 }}>History</Text>
           </Pressable>
         </Link>
+
+        <Pressable onPress={() => setSoundEnabled(!soundEnabled)} style={{ padding: 12, alignItems: 'center' }}>
+          <Text style={{ color: colors.muted, fontWeight: '700', fontSize: 14 }}>
+            {soundEnabled ? '🔔 Sounds on (tap to mute)' : '🔕 Sounds off (tap to unmute)'}
+          </Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );

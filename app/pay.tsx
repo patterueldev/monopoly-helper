@@ -44,9 +44,10 @@ export default function Pay() {
   // Banker mode: the Host pays a player from the Bank (T-003). Only the Host
   // device acting as the Host's player account may use it; everyone else falls
   // back to a regular player-initiated payment.
-  // Request mode: same screen asks another player to pay. The requester is the
-  // destination — the Host (wearing the banker hat) may instead collect into
-  // the Bank; one request.created intent covers both (T-011/T-012).
+  // Request mode: same screen asks another player to pay into my own account.
+  // The Host (wearing the banker hat) may instead collect directly into the
+  // Bank — that posts an immediate transfer, no approval (the Collect-for-Bank
+  // flow); one request.created intent covers the approval-based half (T-011).
   const bankerId = bankerAccountId(state);
   const isRequestMode = paramMode === 'request';
   const canCollectForBank = role === 'host' && !!bankerId;
@@ -99,9 +100,17 @@ export default function Pay() {
   const submit = () => {
     if (isRequestMode) {
       const value = Number(amount);
-      const requester = destination === 'bank' ? (bankerId ?? '') : (myAccount?.id ?? '');
-      if (!payer || !destination || !requester || payer === destination || !Number.isSafeInteger(value) || value <= 0) return;
       const transferReason: TransferReason = reason === 'other' ? { kind: 'other' } : { kind: reason };
+      // The Banker's collection into the Bank is immediate — no payer approval.
+      if (destination === 'bank' && bankerId) {
+        if (!payer || payer === destination || !Number.isSafeInteger(value) || value <= 0) return;
+        const intent = buildTransfer(state, payer, 'bank', value, transferReason, state.events.length);
+        const result = dispatch({ ...intent, actorId: bankerId, intentId: `collect-${Date.now()}-${payer}-${value}` });
+        if (result.ok) router.back();
+        return;
+      }
+      const requester = myAccount?.id ?? '';
+      if (!payer || !destination || !requester || payer === destination || !Number.isSafeInteger(value) || value <= 0) return;
       const intent = buildRequest(state, payer, destination, value, transferReason, requester, `request-${Date.now()}-${payer}-${destination}-${value}`);
       const result = dispatch(intent);
       if (result.ok) router.back();
@@ -281,7 +290,7 @@ export default function Pay() {
               marginTop: 8,
             }}
           >
-            <Text style={{ color: colors.white, fontSize: 18, fontWeight: '800' }}>{isRequestMode ? 'Send request' : 'Confirm payment'}</Text>
+            <Text style={{ color: colors.white, fontSize: 18, fontWeight: '800' }}>{isRequestMode ? (destination === 'bank' ? 'Collect into Bank' : 'Send request') : 'Confirm payment'}</Text>
           </Pressable>
         </ScrollView>
 
