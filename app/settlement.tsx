@@ -52,14 +52,50 @@ export default function Settlement() {
     );
   }
 
+  if (vm.isGameEnded) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }} keyboardShouldPersistTaps="handled">
+          <View style={{ gap: 4 }}>
+            <Text style={{ fontSize: 32, fontWeight: '900', color: colors.green }}>Final rankings</Text>
+            <Text style={{ color: colors.muted, fontSize: 15 }}>
+              The game is complete. Everyone can see the final standings.
+            </Text>
+          </View>
+
+          {vm.finalTally.length === 0 ? (
+            <Text style={{ color: colors.muted, fontSize: 15 }}>No standings were recorded.</Text>
+          ) : (
+            vm.finalTally.map((entry) => {
+              const player = vm.allPlayers.find((p) => p.id === entry.playerId);
+              return (
+                <View key={entry.playerId} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.white, borderRadius: 10, padding: 13 }}>
+                  <Text style={{ width: 32, fontWeight: '900', color: colors.green }}>#{entry.rank ?? '–'}</Text>
+                  <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: player?.color ?? colors.border }} />
+                  <Text style={{ flex: 1, fontWeight: '800' }}>{player?.name ?? entry.playerId}</Text>
+                  {entry.rank === 1 ? <Text style={{ fontSize: 18 }}>🏆</Text> : null}
+                  <Text style={{ fontWeight: '900' }}>{vm.currencySymbol}{entry.netWorth.toLocaleString()}</Text>
+                </View>
+              );
+            })
+          )}
+
+          <Pressable onPress={() => router.replace('/table')} style={{ backgroundColor: colors.green, padding: 17, borderRadius: 12, alignItems: 'center' }}>
+            <Text style={{ color: colors.white, fontSize: 18, fontWeight: '800' }}>Back to table</Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: 32 }} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled">
           <View style={{ gap: 4 }}>
-            <Text style={{ fontSize: 32, fontWeight: '900', color: colors.green }}>{vm.isGameEnded ? 'Final rankings' : 'Settle the game'}</Text>
+            <Text style={{ fontSize: 32, fontWeight: '900', color: colors.green }}>Settle the game</Text>
             <Text style={{ color: colors.muted, fontSize: 15 }}>
-              {vm.isGameEnded ? 'The game is complete. Everyone can see the final standings.' : vm.canFinalize ? 'Everyone has finished. The Host can record the final standings.' : 'Submit your own settlement. The Host will finish the game when everyone is done.'}
+              {vm.canFinalize ? 'Everyone has finished. The Host can record the final standings.' : 'Submit your own settlement. The Host will finish the game when everyone is done.'}
             </Text>
           </View>
 
@@ -135,13 +171,9 @@ export default function Settlement() {
                 <Text style={{ color: colors.muted }}>Current total: <Text style={{ color: colors.green, fontWeight: '900' }}>{vm.currencySymbol}{(targetDraft?.netWorth ?? targetSummary?.netWorth ?? 0).toLocaleString()}</Text></Text>
               </View>
 
-              {vm.isGameEnded ? (
-                <Text style={{ color: colors.green, textAlign: 'center', fontWeight: '800' }}>Finalized.</Text>
-              ) : (
-                <Pressable onPress={submitSettlement} style={{ backgroundColor: colors.green, padding: 16, borderRadius: 12, alignItems: 'center' }}>
-                  <Text style={{ color: colors.white, fontSize: 17, fontWeight: '800' }}>{isHostOverride ? 'Save Host adjustment' : targetStatus === 'submitted' ? 'Update my settlement' : 'Submit my settlement'}</Text>
-                </Pressable>
-              )}
+              <Pressable onPress={submitSettlement} style={{ backgroundColor: colors.green, padding: 16, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ color: colors.white, fontSize: 17, fontWeight: '800' }}>{isHostOverride ? 'Save Host adjustment' : targetStatus === 'submitted' ? 'Update my settlement' : 'Submit my settlement'}</Text>
+              </Pressable>
             </View>
           ) : null}
 

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useProfileStore } from '../store/profileStore';
 import { useConnectionStore } from '../store/connectionStore';
-import { activePlayers, balance } from '../ledger/selectors';
+import { activePlayers, balance, finalRankings } from '../ledger/selectors';
 import { Settlement, SettlementMode } from '../ledger/types';
 import {
   ItemizedPlayerEntry,
@@ -10,6 +10,7 @@ import {
   buildTallyFromSettlements,
   computePlayerSettlement,
   defaultItemizedEntry,
+  defaultMortgageName,
 } from './settlementCalculations';
 
 declare const require: (name: string) => any;
@@ -55,6 +56,9 @@ export function useSettlementViewModel() {
     [state.accounts, state.balances, state.eliminated, state.settlements, dismissedPlayers]
   );
 
+  const finalTally = useMemo(() => finalRankings(state), [state]);
+  const allPlayers = useMemo(() => Object.values(state.accounts).filter((a) => a.kind === 'player'), [state.accounts]);
+
   const setFastValuation = (playerId: string, value: string) => {
     setFastValuations((prev) => ({ ...prev, [playerId]: value }));
   };
@@ -77,13 +81,14 @@ export function useSettlementViewModel() {
 
   const addMortgage = (playerId: string) => {
     const entry = getItemizedEntry(playerId);
+    const existingCount = entry.mortgageEntries?.length ?? 0;
     setItemizedEntries((prev) => ({
       ...prev,
       [playerId]: {
         ...entry,
         mortgageEntries: [
           ...(entry.mortgageEntries ?? []),
-          { id: `${playerId}-${Date.now()}-${Math.random()}`, name: '', value: '' },
+          { id: `${playerId}-${Date.now()}-${Math.random()}`, name: defaultMortgageName(existingCount), value: '' },
         ],
       },
     }));
@@ -183,6 +188,8 @@ export function useSettlementViewModel() {
     mode,
     setMode,
     players,
+    allPlayers,
+    finalTally,
     myAccount,
     isHost,
     isSettlementStarted: state.settlementStarted,

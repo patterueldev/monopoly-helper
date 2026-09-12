@@ -26,3 +26,16 @@ This checklist tracks the current product work. Multiplayer Host/Client behavior
 - Final settlement is a two-phase flow: Host starts settlement, then Host finalizes after participation is complete.
 - A transient disconnect does not dismiss a player. Only an explicit Host action makes a player non-blocking.
 - Dismissed players use cash-only settlement data unless the Host enters an override.
+
+## New tickets
+
+- [x] T-001 — Make Pass GO a Banker function; remove it from individual players, except the Host/Banker.
+- [x] T-002 — Define the Host as both Banker and Player, with the major game functions; regular players should primarily initiate payments.
+- [x] T-003 — Add a receive-from-Bank function so players can receive money from the Banker.
+- [x] T-004 — Add `+20`, `+10`, and `+1` amount denominations.
+- [x] T-005 — Auto-fill settlement mortgage names as `Asset #1`, `Asset #2`, etc.; keep names editable.
+- [x] T-006 — Add player-to-player trading for situations where a player needs to trade outside the payment flow.
+- [x] T-007 — Fix Host game completion so all clients leave the active settlement state, the final rankings screen is shown, and the Finish game button disappears.
+- [x] T-008 — Remove Tax and Card from payment reasons, and remove Pass GO from the reason list now that it is a Banker function.
+- [x] T-009 — Track Lost in Circulation as an explicit amount when money leaves play and the destination is unclear.
+- [x] T-010 — Restrict sending any player, including the Host/Banker, to Jail to the Host/Banker.

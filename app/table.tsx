@@ -6,7 +6,7 @@ import { useGameStore } from '../src/store/gameStore';
 import { useProfileStore } from '../src/store/profileStore';
 import { useConnectionStore } from '../src/store/connectionStore';
 import { useSettlementViewModel } from '../src/viewmodels/useSettlementViewModel';
-import { activePlayers, balance, circulation, currentTurnPlayer, nextTurnPlayer, isJailed } from '../src/ledger/selectors';
+import { activePlayers, balance, bankerAccountId, circulation, currentTurnPlayer, lostInCirculation, nextTurnPlayer, isJailed } from '../src/ledger/selectors';
 import { colors } from '../src/theme';
 import { ConnectionBanner } from '../src/components/ConnectionBanner';
 
@@ -26,6 +26,11 @@ export default function Table() {
   const nextTurn = nextTurnPlayer(state);
   const isMyTurn = !!(currentTurn && myAccount && currentTurn.id === myAccount.id);
   const isHost = role === 'host';
+  // Strict multiplayer: only the Host device acting as the Host's player account
+  // (the Banker) may run banker functions — Pass GO and Jail. Turn order does
+  // not gate banker functions.
+  const isBanker = isHost && !!bankerAccountId(state);
+  const bankerActorId = bankerAccountId(state) ?? '';
 
   useEffect(() => {
     if (settlementStarted && !ended) router.replace('/settlement');
@@ -38,9 +43,9 @@ export default function Table() {
   };
 
   const passGo = (id: string) =>
-    isMyTurn && dispatch({
+    isBanker && dispatch({
       type: 'transfer',
-      actorId: 'bank',
+      actorId: bankerActorId,
       intentId: `go-${Date.now()}-${id}`,
       payload: { from: 'bank', to: id, amount: state.config?.goSalary ?? 200, reason: { kind: 'go' } },
     });
@@ -56,10 +61,11 @@ export default function Table() {
   };
 
   const toggleJail = (id: string) => {
+    if (!isBanker) return;
     const jailed = isJailed(state, id);
     dispatch({
       type: jailed ? 'player.released' : 'player.jailed',
-      actorId: 'bank',
+      actorId: bankerActorId,
       intentId: `jail-${Date.now()}-${id}`,
       payload: { accountId: id },
     });
@@ -69,7 +75,9 @@ export default function Table() {
     const jailed = isJailed(state, p.id);
     Alert.alert(p.name, `${state.config?.currencySymbol}${balance(state, p.id).toLocaleString()} · ${jailed ? 'In Jail' : 'Active'}`, [
       ...(isMyTurn ? [{ text: 'Pay this player', onPress: () => router.push({ pathname: '/pay', params: { to: p.id } }) }] : []),
-      { text: jailed ? 'Release from Jail' : 'Send to Jail', onPress: () => toggleJail(p.id) },
+      ...(isMyTurn ? [{ text: 'Trade with this player', onPress: () => router.push({ pathname: '/trade', params: { to: p.id } }) }] : []),
+      ...(isBanker ? [{ text: 'Pay from Bank', onPress: () => router.push({ pathname: '/pay', params: { to: p.id, from: 'bank' } }) }] : []),
+      ...(isBanker ? [{ text: jailed ? 'Release from Jail' : 'Send to Jail', onPress: () => toggleJail(p.id) }] : []),
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
@@ -180,6 +188,12 @@ export default function Table() {
           In circulation · {state.config?.currencySymbol}
           {circulation(state).toLocaleString()}
         </Text>
+        {lostInCirculation(state) > 0 ? (
+          <Text style={{ color: colors.muted, textAlign: 'center', marginTop: -2, marginBottom: 6, fontSize: 14 }}>
+            Lost in circulation · {state.config?.currencySymbol}
+            {lostInCirculation(state).toLocaleString()}
+          </Text>
+        ) : null}
 
         <Link href="/pay" asChild>
           <Pressable disabled={!isMyTurn} style={{ backgroundColor: colors.green, padding: 16, borderRadius: 12, alignItems: 'center', opacity: isMyTurn ? 1 : 0.45 }}>
@@ -187,8 +201,22 @@ export default function Table() {
           </Pressable>
         </Link>
 
+        <Link href="/trade" asChild>
+          <Pressable disabled={!isMyTurn} style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center', opacity: isMyTurn ? 1 : 0.45 }}>
+            <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>Trade</Text>
+          </Pressable>
+        </Link>
+
+        {isBanker ? (
+          <Link href={{ pathname: '/pay', params: { from: 'bank' } }} asChild>
+            <Pressable style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center' }}>
+              <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>Pay from Bank</Text>
+            </Pressable>
+          </Link>
+        ) : null}
+
         <Pressable
-          disabled={!isMyTurn}
+          disabled={!isBanker}
           onPress={() =>
             Alert.alert(
               'Pass GO',
@@ -196,7 +224,7 @@ export default function Table() {
               players.map((p) => ({ text: p.name, onPress: () => passGo(p.id) }))
             )
           }
-          style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center', opacity: isMyTurn ? 1 : 0.45 }}
+          style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center', opacity: isBanker ? 1 : 0.45 }}
         >
           <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>Pass GO</Text>
         </Pressable>

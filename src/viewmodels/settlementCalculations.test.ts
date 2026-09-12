@@ -4,6 +4,7 @@ import {
   computeItemizedAssetTotal,
   buildFinalTally,
   defaultItemizedEntry,
+  defaultMortgageName,
   ItemizedPlayerEntry,
 } from './settlementCalculations';
 import { Account, DEFAULT_CONFIG } from '../ledger/types';
@@ -127,5 +128,13 @@ describe('settlementCalculations', () => {
     const endedState = applyEvent(state, endEvent);
     expect(endedState.invalid).toBe(false);
     expect(endedState.ended).toBe(true);
+  });
+});
+
+describe('defaultMortgageName (T-005)', () => {
+  it('auto-fills sequential asset names starting at Asset #1', () => {
+    expect(defaultMortgageName(0)).toBe('Asset #1');
+    expect(defaultMortgageName(1)).toBe('Asset #2');
+    expect(defaultMortgageName(4)).toBe('Asset #5');
   });
 });

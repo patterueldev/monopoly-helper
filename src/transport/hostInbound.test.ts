@@ -84,4 +84,24 @@ describe('HostTransport handleInbound', () => {
       message: { kind: 'reject', intentId: 'client-end', reason: 'Only the Host can perform this action' },
     });
   });
+
+  it('rejects inbound jail and release intents from clients before dispatch', () => {
+    const ctx = contextWith(() => { throw new Error('must not dispatch'); });
+    for (const [type, intentId] of [['player.jailed', 'client-jail'], ['player.released', 'client-release']] as const) {
+      const intent: Intent = { type, payload: { accountId: 'b' }, actorId: 'b', intentId };
+      expect(handleInbound({ kind: 'intent', intent }, ctx)).toEqual({
+        action: 'reply',
+        message: { kind: 'reject', intentId, reason: 'Only the Host can perform this action' },
+      });
+    }
+  });
+
+  it('rejects inbound Bank-issued transfers (e.g. Pass GO) from clients before dispatch', () => {
+    const ctx = contextWith(() => { throw new Error('must not dispatch'); });
+    const intent: Intent = { type: 'transfer', payload: { from: 'bank', to: 'b', amount: 200, reason: { kind: 'go' } }, actorId: 'b', intentId: 'client-go' };
+    expect(handleInbound({ kind: 'intent', intent }, ctx)).toEqual({
+      action: 'reply',
+      message: { kind: 'reject', intentId: 'client-go', reason: 'Only the Host can perform this action' },
+    });
+  });
 });
