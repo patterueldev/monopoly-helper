@@ -6,6 +6,7 @@ import { DEFAULT_PORT } from '../transport/wireProtocol';
 import { PLAYER_PALETTE } from '../theme';
 import { Account } from '../ledger/types';
 import { DiscoveredHost, scanLocalSubnet } from '../transport/discovery';
+import { parseJoinQr } from '../transport/joinQr';
 
 declare const require: (name: string) => any;
 const uuid = () => {
@@ -189,6 +190,14 @@ export function useJoinViewModel() {
     return connectWithTarget(dh.ip, dh.port);
   };
 
+  const connectToQr = (text: string) => {
+    const target = parseJoinQr(text);
+    if (!target) return { ok: false as const, error: "That QR code isn't a Monopoly Banker table code" };
+    setHost(target.host);
+    setPort(String(target.port));
+    return connectWithTarget(target.host, target.port);
+  };
+
   return {
     playerName,
     setPlayerName,
@@ -208,6 +217,7 @@ export function useJoinViewModel() {
     rescan,
     connect,
     connectToHost,
+    connectToQr,
     colorConflict,
     resolveColorConflict,
     cancelConflict,
