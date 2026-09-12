@@ -26,3 +26,8 @@ export const nextTurnPlayer = (s: GameState): Account | undefined => {
 };
 export const history = (s: GameState) => s.events.filter(e => e.type !== 'transfer.reversed').map(e => e.type === 'transfer' ? { event: e, reversed: s.reversed.has(e.seq) } : { event: e, reversed: false }).reverse();
 export const latestUndo = (s: GameState) => { const boundary = [...s.events].reverse().find(e => e.type === 'player.eliminated')?.seq ?? -1; return [...s.events].reverse().find(e => e.type === 'transfer' && e.seq > boundary && !s.reversed.has(e.seq)); };
+/** Incoming payment requests: pending, and I am the payer — I approve or decline. */
+export const incomingRequests = (s: GameState, id: string) => Object.values(s.requests ?? {}).filter(r => r.status === 'pending' && r.from === id).sort((a, b) => a.createdSeq - b.createdSeq);
+/** Outgoing payment requests: pending, created by me — I may cancel. */
+export const outgoingRequests = (s: GameState, id: string) => Object.values(s.requests ?? {}).filter(r => r.status === 'pending' && r.createdBy === id).sort((a, b) => a.createdSeq - b.createdSeq);
+export const pendingRequestCount = (s: GameState, id: string) => incomingRequests(s, id).length;

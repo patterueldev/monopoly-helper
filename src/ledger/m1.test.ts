@@ -38,6 +38,25 @@ describe('M1 deterministic replay', () => {
     for (let i = 1; i <= 200; i += 1) { const amount = (i % 17) + 1; events.push(transfer(i, i % 2 ? 'a' : 'b', i % 2 ? 'b' : 'a', amount)); if (i % 2) { expectedA -= amount; expectedB += amount; } else { expectedB -= amount; expectedA += amount; } }
     const one = fold(events); const two = fold(events); expect(one.balances).toEqual({ bank: 0, a: expectedA, b: expectedB }); expect(two).toEqual(one);
   });
+
+  it('replays a request create/approve pair deterministically', () => {
+    const events: GameEvent[] = [
+      start(),
+      makeEvent('request.created', { requestId: 'r1', from: 'b', to: 'a', amount: 100, reason: { kind: 'other' } }, 'a', 1, 'req-r1'),
+      makeEvent('request.resolved', { requestId: 'r1', outcome: 'paid' }, 'b', 2, 'res-r1'),
+    ];
+    const one = fold(events); const two = fold(events);
+    expect(one.balances).toEqual({ bank: 0, a: 1600, b: 1400 });
+    expect(two).toEqual(one);
+  });
+
+  it('does not allow a non-payer to approve a request', () => {
+    const pending = fold([
+      start(),
+      makeEvent('request.created', { requestId: 'r1', from: 'b', to: 'a', amount: 100, reason: { kind: 'other' } }, 'a', 1, 'req-r1'),
+    ]);
+    expect(applyEvent(pending, makeEvent('request.resolved', { requestId: 'r1', outcome: 'paid' }, 'a', 2, 'res-r1')).invalid).toBe(true);
+  });
 });
 
 describe('game config defaults (T-004)', () => {

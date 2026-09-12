@@ -6,7 +6,7 @@ import { useGameStore } from '../src/store/gameStore';
 import { useProfileStore } from '../src/store/profileStore';
 import { useConnectionStore } from '../src/store/connectionStore';
 import { useSettlementViewModel } from '../src/viewmodels/useSettlementViewModel';
-import { activePlayers, balance, bankerAccountId, circulation, currentTurnPlayer, lostInCirculation, nextTurnPlayer, isJailed } from '../src/ledger/selectors';
+import { activePlayers, balance, bankerAccountId, circulation, currentTurnPlayer, lostInCirculation, nextTurnPlayer, isJailed, pendingRequestCount } from '../src/ledger/selectors';
 import { colors } from '../src/theme';
 import { ConnectionBanner } from '../src/components/ConnectionBanner';
 
@@ -31,6 +31,7 @@ export default function Table() {
   // not gate banker functions.
   const isBanker = isHost && !!bankerAccountId(state);
   const bankerActorId = bankerAccountId(state) ?? '';
+  const myRequestCount = myAccount ? pendingRequestCount(state, myAccount.id) : 0;
 
   useEffect(() => {
     if (settlementStarted && !ended) router.replace('/settlement');
@@ -76,6 +77,8 @@ export default function Table() {
     Alert.alert(p.name, `${state.config?.currencySymbol}${balance(state, p.id).toLocaleString()} · ${jailed ? 'In Jail' : 'Active'}`, [
       ...(isMyTurn ? [{ text: 'Pay this player', onPress: () => router.push({ pathname: '/pay', params: { to: p.id } }) }] : []),
       ...(isMyTurn ? [{ text: 'Trade with this player', onPress: () => router.push({ pathname: '/trade', params: { to: p.id } }) }] : []),
+      // Requests are never turn-gated: asking costs nothing, only the payer's approval moves money.
+      ...(myAccount && p.id !== myAccount.id ? [{ text: 'Request money', onPress: () => router.push({ pathname: '/pay', params: { mode: 'request', to: p.id } }) }] : []),
       ...(isBanker ? [{ text: 'Pay from Bank', onPress: () => router.push({ pathname: '/pay', params: { to: p.id, from: 'bank' } }) }] : []),
       ...(isBanker ? [{ text: jailed ? 'Release from Jail' : 'Send to Jail', onPress: () => toggleJail(p.id) }] : []),
       { text: 'Cancel', style: 'cancel' },
@@ -214,6 +217,28 @@ export default function Table() {
             </Pressable>
           </Link>
         ) : null}
+
+        {isBanker ? (
+          <Link href={{ pathname: '/pay', params: { mode: 'request', collect: 'bank' } }} asChild>
+            <Pressable style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center' }}>
+              <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>Collect for Bank</Text>
+            </Pressable>
+          </Link>
+        ) : null}
+
+        <Link href="/requests" asChild>
+          <Pressable
+            style={
+              myRequestCount > 0
+                ? { backgroundColor: colors.green, padding: 16, borderRadius: 12, alignItems: 'center' }
+                : { borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center' }
+            }
+          >
+            <Text style={{ color: myRequestCount > 0 ? colors.white : colors.green, fontSize: 16, fontWeight: '800' }}>
+              {myRequestCount > 0 ? `Requests (${myRequestCount} to pay)` : 'Requests'}
+            </Text>
+          </Pressable>
+        </Link>
 
         <Pressable
           disabled={!isBanker}

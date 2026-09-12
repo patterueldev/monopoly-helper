@@ -104,4 +104,23 @@ describe('HostTransport handleInbound', () => {
       message: { kind: 'reject', intentId: 'client-go', reason: 'Only the Host can perform this action' },
     });
   });
+
+  it('rejects inbound Bank-collect payment requests from clients before dispatch', () => {
+    const ctx = contextWith(() => { throw new Error('must not dispatch'); });
+    const intent: Intent = { type: 'request.created', payload: { requestId: 'tax', from: 'b', to: 'bank', amount: 200, reason: { kind: 'other' } }, actorId: 'b', intentId: 'client-tax' };
+    expect(handleInbound({ kind: 'intent', intent }, ctx)).toEqual({
+      action: 'reply',
+      message: { kind: 'reject', intentId: 'client-tax', reason: 'Only the Host can perform this action' },
+    });
+  });
+
+  it('accepts inbound player-to-player payment requests and payer resolutions', () => {
+    const seen: Intent[] = [];
+    const ctx = contextWith((intent) => { seen.push(intent); return { ok: true, value: { event: sampleEvent, duplicate: false } }; });
+    const request: Intent = { type: 'request.created', payload: { requestId: 'r1', from: 'b', to: 'a', amount: 100, reason: { kind: 'rent' } }, actorId: 'a', intentId: 'r1' };
+    const approve: Intent = { type: 'request.resolved', payload: { requestId: 'r1', outcome: 'paid' }, actorId: 'b', intentId: 'r1-paid' };
+    expect(handleInbound({ kind: 'intent', intent: request }, ctx)).toEqual({ action: 'none' });
+    expect(handleInbound({ kind: 'intent', intent: approve }, ctx)).toEqual({ action: 'none' });
+    expect(seen).toEqual([request, approve]);
+  });
 });
