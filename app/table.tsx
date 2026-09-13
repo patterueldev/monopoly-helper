@@ -1,14 +1,18 @@
 import { Link, router } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
-import { useEffect } from 'react';
-import { Alert, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '../src/store/gameStore';
 import { useProfileStore } from '../src/store/profileStore';
 import { useConnectionStore } from '../src/store/connectionStore';
 import { useSettlementViewModel } from '../src/viewmodels/useSettlementViewModel';
 import { activePlayers, balance, bankerAccountId, circulation, currentTurnPlayer, isGameStarted, lostInCirculation, nextTurnPlayer, isJailed, pendingRequestCount } from '../src/ledger/selectors';
+import { Account } from '../src/ledger/types';
 import { colors } from '../src/theme';
 import { ConnectionBanner } from '../src/components/ConnectionBanner';
+import { ActionSheet, ActionSheetAction } from '../src/components/ActionSheet';
+import { BankerBadge } from '../src/components/BankerBadge';
 
 export default function Table() {
   useKeepAwake();
@@ -22,8 +26,11 @@ export default function Table() {
   const role = useConnectionStore((x) => x.role);
   const settlement = useSettlementViewModel();
   const myAccount = findMyAccount(state.accounts);
+  const [actionPlayerId, setActionPlayerId] = useState<string | null>(null);
+  const [passGoOpen, setPassGoOpen] = useState(false);
 
   const players = activePlayers(state);
+  const actionPlayer = players.find((p) => p.id === actionPlayerId) ?? null;
   const currentTurn = currentTurnPlayer(state);
   const nextTurn = nextTurnPlayer(state);
   const isMyTurn = !!(currentTurn && myAccount && currentTurn.id === myAccount.id);
@@ -99,21 +106,24 @@ export default function Table() {
     });
   };
 
-  const onPlayerPress = (p: typeof players[0]) => {
+  const playerActions = (p: Account): ActionSheetAction[] => {
     const jailed = isJailed(state, p.id);
-    Alert.alert(p.name, `${state.config?.currencySymbol}${balance(state, p.id).toLocaleString()} · ${jailed ? 'In Jail' : 'Active'}`, [
-      ...(isMyTurn ? [{ text: 'Pay this player', onPress: () => router.push({ pathname: '/pay', params: { to: p.id } }) }] : []),
-      ...(isMyTurn ? [{ text: 'Trade with this player', onPress: () => router.push({ pathname: '/trade', params: { to: p.id } }) }] : []),
-      // Requests are never turn-gated: asking costs nothing, only the payer's approval moves money.
-      ...(myAccount && p.id !== myAccount.id ? [{ text: 'Request money', onPress: () => router.push({ pathname: '/pay', params: { mode: 'request', to: p.id } }) }] : []),
-      ...(isBanker ? [{ text: 'Pay from Bank', onPress: () => router.push({ pathname: '/pay', params: { to: p.id, from: 'bank' } }) }] : []),
-      ...(isBanker ? [{ text: jailed ? 'Release from Jail' : 'Send to Jail', onPress: () => toggleJail(p.id) }] : []),
-      // The banker uses their own authority above (even for themselves); everyone
-      // else gets a self-service jail option on their own row.
-      ...(myAccount && p.id === myAccount.id && !isBanker ? [{ text: jailed ? 'Get out of Jail' : 'Go to Jail', onPress: () => toggleSelfJail(p.id) }] : []),
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    const actions: ActionSheetAction[] = [];
+    // Requests are never turn-gated: asking costs nothing, only the payer's approval moves money.
+    if (isMyTurn) actions.push({ label: 'Pay this player', onPress: () => router.push({ pathname: '/pay', params: { to: p.id } }) });
+    if (isMyTurn) actions.push({ label: 'Trade with this player', onPress: () => router.push({ pathname: '/trade', params: { to: p.id } }) });
+    if (myAccount && p.id !== myAccount.id) actions.push({ label: 'Request money', onPress: () => router.push({ pathname: '/pay', params: { mode: 'request', to: p.id } }) });
+    if (isBanker) actions.push({ label: 'Pay from Bank', onPress: () => router.push({ pathname: '/pay', params: { to: p.id, from: 'bank' } }) });
+    if (isBanker) actions.push({ label: jailed ? 'Release from Jail' : 'Send to Jail', style: jailed ? 'default' : 'destructive', onPress: () => toggleJail(p.id) });
+    // The banker uses their own authority above (even for themselves); everyone
+    // else gets a self-service jail option on their own row.
+    if (myAccount && p.id === myAccount.id && !isBanker) {
+      actions.push({ label: jailed ? 'Get out of Jail' : 'Go to Jail', style: jailed ? 'default' : 'destructive', onPress: () => toggleSelfJail(p.id) });
+    }
+    return actions;
   };
+
+  const onPlayerPress = (p: Account) => setActionPlayerId(p.id);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
@@ -174,6 +184,7 @@ export default function Table() {
             const isMe = p.id === myAccount?.id;
             const isTurn = p.id === currentTurn?.id;
             const jailed = isJailed(state, p.id);
+            const isBankerPlayer = p.id === bankerAccountId(state);
 
             return (
               <Pressable
@@ -217,6 +228,7 @@ export default function Table() {
                       <Text style={{ fontSize: 11, fontWeight: '800', color: colors.ink }}>Turn</Text>
                     </View>
                   ) : null}
+                  {isBankerPlayer ? <BankerBadge /> : null}
                   {jailed ? (
                     <View style={{ backgroundColor: '#FDE8E8', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
                       <Text style={{ fontSize: 11, fontWeight: '800', color: colors.red }}>🔒 Jail</Text>
@@ -287,13 +299,7 @@ export default function Table() {
 
         {isBanker ? (
           <Pressable
-            onPress={() =>
-              Alert.alert(
-                'Pass GO',
-                'Choose a player',
-                players.map((p) => ({ text: p.name, onPress: () => passGo(p.id) }))
-              )
-            }
+            onPress={() => setPassGoOpen(true)}
             style={{ borderColor: colors.green, borderWidth: 2, padding: 14, borderRadius: 12, alignItems: 'center' }}
           >
             <Text style={{ color: colors.green, fontSize: 16, fontWeight: '800' }}>Pass GO</Text>
@@ -322,6 +328,22 @@ export default function Table() {
           </Text>
         </Pressable>
       </ScrollView>
+
+      <ActionSheet
+        visible={actionPlayer !== null}
+        title={actionPlayer?.name ?? ''}
+        message={actionPlayer ? `${state.config?.currencySymbol}${balance(state, actionPlayer.id).toLocaleString()} · ${isJailed(state, actionPlayer.id) ? 'In Jail' : 'Active'}` : undefined}
+        actions={actionPlayer ? playerActions(actionPlayer) : []}
+        onClose={() => setActionPlayerId(null)}
+      />
+
+      <ActionSheet
+        visible={passGoOpen}
+        title="Pass GO"
+        message="Choose a player"
+        actions={players.map((p) => ({ label: p.name, onPress: () => passGo(p.id) }))}
+        onClose={() => setPassGoOpen(false)}
+      />
     </SafeAreaView>
   );
 }

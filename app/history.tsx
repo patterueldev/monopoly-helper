@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
-import { Pressable, SafeAreaView, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '../src/store/gameStore';
 import { history, latestUndo } from '../src/ledger/selectors';
 import { colors } from '../src/theme';

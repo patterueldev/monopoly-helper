@@ -20,6 +20,10 @@ export interface DiagnosticsInput {
   status: string;
   lastError: string | null;
   localIp: string | null;
+  /** Active network type from expo-network (WIFI, CELLULAR, …), when known. */
+  networkType?: string | null;
+  /** How the last join dialed: wifi-pinned, unpinned-fallback, default. */
+  socketSummary?: string | null;
   discoveredHosts: ReportedHost[];
   /** Newest first, as returned by getLogs(). */
   logs: LogEntry[];
@@ -34,6 +38,8 @@ export function formatDiagnosticsReport(input: DiagnosticsInput): string {
     `Role: ${input.role} · Status: ${input.status}`,
     `Last error: ${input.lastError ?? 'none'}`,
     `Local IP: ${input.localIp ?? 'unknown'}`,
+    `Network: ${input.networkType ?? 'unknown'}`,
+    `Socket: ${input.socketSummary ?? 'n/a'}`,
   ];
 
   if (input.discoveredHosts.length === 0) {

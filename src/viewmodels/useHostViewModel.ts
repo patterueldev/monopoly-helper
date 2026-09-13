@@ -5,6 +5,7 @@ import { useGameStore } from '../store/gameStore';
 import { useProfileStore } from '../store/profileStore';
 import { DEFAULT_PORT } from '../transport/wireProtocol';
 import { PLAYER_PALETTE } from '../theme';
+import { bankerAccountId } from '../ledger/selectors';
 
 declare const require: (name: string) => any;
 
@@ -114,6 +115,7 @@ export function useHostViewModel() {
     gameStarted: state.gameStarted,
     canArrangePlayers: !state.gameStarted,
     hostPlayerId,
+    bankerAccountId: bankerAccountId(state),
     movePlayer,
     error: lastError,
     isListening: status === 'listening',

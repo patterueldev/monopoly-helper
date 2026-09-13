@@ -8,7 +8,7 @@ import { Transport } from '../transport/Transport';
 declare const require: (name: string) => any;
 const uuid = () => { try { return require('expo-crypto').randomUUID(); } catch { return `game-${Date.now()}-${Math.random()}`; } };
 
-interface ArchiveEntry { id: string; createdAt: number; updatedAt: number; status: 'unfinished' | 'ended' | 'unrecoverable'; players: string[]; winners: string[]; }
+export interface ArchiveEntry { id: string; createdAt: number; updatedAt: number; status: 'unfinished' | 'ended' | 'unrecoverable'; players: string[]; winners: string[]; }
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /**
@@ -55,7 +55,7 @@ export const createGameStore = (storage: KeyValueStorage = defaultStorage()) => 
 
   return create<Store>((set, get) => ({
     gameId: lastGameId(storage) ?? null,
-    state: (() => { const id = lastGameId(storage); return id ? fold(inspectGame(storage, id).events) : initialState(); })(),
+    state: (() => { const id = lastGameId(storage); return id ? inspectGame(storage, id).state : initialState(); })(),
     storage,
     role: 'single',
     transport: null,
@@ -104,7 +104,7 @@ export const createGameStore = (storage: KeyValueStorage = defaultStorage()) => 
       const result = loadGame(storage, id);
       if (result.unrecoverable) return { ok: false, error: 'Game is unrecoverable' };
       try {
-        set({ gameId: id, state: fold(result.events) });
+        set({ gameId: id, state: result.state });
         try { storage.set('lastGameId', id); } catch { /* advisory */ }
         return { ok: true, value: { recovered: result.recovered, corrupt: result.corrupt } };
       } catch { return { ok: false, error: 'Could not load game' }; }
@@ -123,7 +123,7 @@ export const createGameStore = (storage: KeyValueStorage = defaultStorage()) => 
 
     listGames: () => listGameIds(storage).map(id => {
       const result = inspectGame(storage, id);
-      const state = fold(result.events);
+      const state = result.state;
       const first = result.events[0];
       return {
         id,

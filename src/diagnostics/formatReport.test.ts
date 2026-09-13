@@ -45,4 +45,23 @@ describe('diagnostics report formatter', () => {
     expect(report).toContain('Nearby tables seen: none');
     expect(report).toContain('Last error: none');
   });
+
+  it('includes network type and socket summary when known', () => {
+    const report = formatDiagnosticsReport({
+      appVersion: '1.3.3',
+      platform: 'android',
+      osVersion: '13',
+      deviceModel: 'SM-A325F',
+      role: 'single',
+      status: 'error',
+      lastError: 'Couldn’t reach 192.168.254.103:51837',
+      localIp: '192.168.254.106',
+      networkType: 'WIFI',
+      socketSummary: 'wifi-pinned',
+      discoveredHosts: [],
+      logs: [],
+    });
+    expect(report).toContain('Network: WIFI');
+    expect(report).toContain('Socket: wifi-pinned');
+  });
 });

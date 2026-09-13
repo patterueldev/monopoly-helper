@@ -2,7 +2,7 @@ name: Validate release version
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      BASE_REF: ${{ github.base_ref }}
     steps:
       - name: Checkout pull request
         uses: actions/checkout@v4
@@ -27,6 +28,14 @@ jobs:
           node <<'NODE'
           const { execFileSync } = require('node:child_process');
           const fs = require('node:fs');
+
+          // Feature work lands on develop without a release; the version bump
+          // is enforced only when shipping to main via a develop -> main PR.
+          const baseRef = process.env.BASE_REF || 'main';
+          if (baseRef === 'develop') {
+            console.log('Base branch is develop; skipping release version validation.');
+            process.exit(0);
+          }
 
           const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
           const parseVersion = (value, label) => {
@@ -87,20 +96,20 @@ jobs:
             throw new Error(`app.json (${currentApp}) and package.json (${currentPackage}) must match`);
           }
           if (baseApp !== basePackage) {
-            throw new Error(`main has mismatched versions: app.json (${baseApp}) and package.json (${basePackage})`);
+            throw new Error(`${baseRef} has mismatched versions: app.json (${baseApp}) and package.json (${basePackage})`);
           }
 
           if (needsBump) {
             if (compare(current, base) <= 0 || compare(currentPackageParts, basePackageParts) <= 0) {
               throw new Error(
                 `This PR touches code (${codeFiles.join(', ')}) so its version ${currentApp} must be higher ` +
-                  `than main version ${baseApp}`
+                  `than ${baseRef} version ${baseApp}`
               );
             }
-            console.log(`Code changed; version ${currentApp} is valid and higher than main's ${baseApp}.`);
+            console.log(`Code changed; version ${currentApp} is valid and higher than ${baseRef}'s ${baseApp}.`);
           } else {
             if (compare(current, base) < 0 || compare(currentPackageParts, basePackageParts) < 0) {
-              throw new Error(`Version downgrade is not allowed: PR version ${currentApp} < main version ${baseApp}`);
+              throw new Error(`Version downgrade is not allowed: PR version ${currentApp} < ${baseRef} version ${baseApp}`);
             }
             if (currentApp !== baseApp) {
               console.log(`Non-code change with optional version bump ${baseApp} -> ${currentApp}; accepted.`);
