@@ -12,6 +12,7 @@ import { Account } from '../src/ledger/types';
 import { colors } from '../src/theme';
 import { ConnectionBanner } from '../src/components/ConnectionBanner';
 import { ActionSheet, ActionSheetAction } from '../src/components/ActionSheet';
+import { BankerBadge } from '../src/components/BankerBadge';
 
 export default function Table() {
   useKeepAwake();
@@ -183,6 +184,7 @@ export default function Table() {
             const isMe = p.id === myAccount?.id;
             const isTurn = p.id === currentTurn?.id;
             const jailed = isJailed(state, p.id);
+            const isBankerPlayer = p.id === bankerAccountId(state);
 
             return (
               <Pressable
@@ -226,6 +228,7 @@ export default function Table() {
                       <Text style={{ fontSize: 11, fontWeight: '800', color: colors.ink }}>Turn</Text>
                     </View>
                   ) : null}
+                  {isBankerPlayer ? <BankerBadge /> : null}
                   {jailed ? (
                     <View style={{ backgroundColor: '#FDE8E8', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
                       <Text style={{ fontSize: 11, fontWeight: '800', color: colors.red }}>🔒 Jail</Text>

@@ -6,6 +6,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { colors } from '../src/theme';
 import { encodeJoinQr } from '../src/transport/joinQr';
 import { useHostViewModel } from '../src/viewmodels/useHostViewModel';
+import { BankerBadge } from '../src/components/BankerBadge';
 
 export default function Host() {
   useKeepAwake();
@@ -121,24 +122,31 @@ export default function Host() {
                       </View>
                     </Pressable>
 
-                    <View
-                      style={{
-                        backgroundColor: player.id === vm.hostPlayerId ? colors.green : colors.border,
-                        paddingHorizontal: 10,
-                        paddingVertical: 4,
-                        borderRadius: 8,
-                      }}
-                    >
-                      <Text
+                    {/* Banker row (authoritative hostAccountId, falling back to the
+                        local host profile) gets the Banker pill; everyone else shows
+                        connection status. */}
+                    {(player.id === (vm.bankerAccountId ?? vm.hostPlayerId)) ? (
+                      <BankerBadge label="Banker (You)" />
+                    ) : (
+                      <View
                         style={{
-                          color: player.id === vm.hostPlayerId ? colors.white : colors.muted,
-                          fontSize: 12,
-                          fontWeight: '800',
+                          backgroundColor: colors.border,
+                          paddingHorizontal: 10,
+                          paddingVertical: 4,
+                          borderRadius: 8,
                         }}
                       >
-                        {player.id === vm.hostPlayerId ? 'HOST (YOU)' : 'CONNECTED'}
-                      </Text>
-                    </View>
+                        <Text
+                          style={{
+                            color: colors.muted,
+                            fontSize: 12,
+                            fontWeight: '800',
+                          }}
+                        >
+                          CONNECTED
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
                   {vm.canArrangePlayers ? (
