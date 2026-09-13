@@ -116,10 +116,11 @@ jobs:
           cat update.json
 
       - name: Distribute APK to Firebase App Distribution
+        continue-on-error: true
         run: |
           firebase appdistribution:distribute monopoly-banker-preview.apk \
             --app "$FIREBASE_ANDROID_APP_ID" \
-            --groups family \
+            --groups "$FIREBASE_TESTER_GROUP" \
             --release-notes "Monopoly Banker v${{ steps.manifest.outputs.version }} for Android (commit $GITHUB_SHA)"
 
       - name: Create GitHub Release
