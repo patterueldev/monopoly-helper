@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useProfileStore } from '../store/profileStore';
 import { useConnectionStore } from '../store/connectionStore';
-import { activePlayers, balance, finalRankings } from '../ledger/selectors';
+import { activePlayers, balance, bankerAccountId, finalRankings } from '../ledger/selectors';
 import { Settlement, SettlementMode } from '../ledger/types';
 import {
   ItemizedPlayerEntry,
@@ -192,6 +192,7 @@ export function useSettlementViewModel() {
     finalTally,
     myAccount,
     isHost,
+    bankerAccountId: bankerAccountId(state),
     isSettlementStarted: state.settlementStarted,
     isGameEnded: state.ended,
     settlementStatus: state.settlementStatus,

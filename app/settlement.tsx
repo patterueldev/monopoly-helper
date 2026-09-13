@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors } from '../src/theme';
 import { useSettlementViewModel } from '../src/viewmodels/useSettlementViewModel';
+import { BankerBadge } from '../src/components/BankerBadge';
 
 export default function Settlement() {
   const vm = useSettlementViewModel();
@@ -108,6 +109,7 @@ export default function Settlement() {
                   <View key={player.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: player.color }} />
                     <Text style={{ flex: 1, fontWeight: '700' }}>{player.name}</Text>
+                    {player.id === vm.bankerAccountId ? <BankerBadge /> : null}
                     <Text style={{ color: status === 'submitted' ? colors.green : colors.muted, fontWeight: '800' }}>{status}</Text>
                     {status === 'pending' && player.id !== vm.myAccount?.id ? (
                       <Pressable onPress={() => Alert.alert('Dismiss player?', `${player.name} will no longer block finalization.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Dismiss', style: 'destructive', onPress: () => vm.dismissPlayer(player.id) }])}>
@@ -186,6 +188,7 @@ export default function Settlement() {
                   <Text style={{ width: 32, fontWeight: '900', color: colors.green }}>#{summary.rank}</Text>
                   <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: player.color }} />
                   <Text style={{ flex: 1, fontWeight: '800' }}>{player.name}</Text>
+                  {player.id === vm.bankerAccountId ? <BankerBadge /> : null}
                   <Text style={{ fontWeight: '900' }}>{vm.currencySymbol}{summary.netWorth.toLocaleString()}</Text>
                 </View>
               );
