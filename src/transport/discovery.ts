@@ -1,27 +1,35 @@
 import { DiscoveredHost, getSubnetIps, chunkArray, parseWelcomeResponse } from './discoveryLogic';
 import { DEFAULT_PORT, PROTOCOL_VERSION, decodeLine, encodeMessage } from './wireProtocol';
+import { ConnectionSocketOptions, buildConnectionSocketOptions, currentPlatform } from './socketOptions';
 import { log } from '../diagnostics/logBuffer';
 import { setLastSeenHosts } from '../diagnostics/lastSeen';
 
 export * from './discoveryLogic';
+
+/** How a single probe ended — tallied by scanLocalSubnet so the next
+ * connection report distinguishes "host unreachable" from "host refused". */
+export type ProbeOutcome = 'found' | 'timeout' | 'refused' | 'rejected';
 
 declare const require: (name: string) => any;
 
 /**
  * Attempts a lightweight TCP probe to a single host:port.
  * Sends a 'hello' probe and parses the host's 'welcome' response.
+ * `onOutcome` reports how the probe ended for scan-level tallies.
  */
 export async function probeHost(
   host: string,
   port = DEFAULT_PORT,
-  timeoutMs = 450
+  timeoutMs = 1000,
+  socketOptions: ConnectionSocketOptions = {},
+  onOutcome?: (outcome: ProbeOutcome) => void
 ): Promise<DiscoveredHost | null> {
   return new Promise((resolve) => {
     let settled = false;
     let socket: any = null;
     let timer: any = null;
 
-    const cleanup = () => {
+    const finish = (outcome: ProbeOutcome, value: DiscoveredHost | null) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
@@ -31,16 +39,24 @@ export async function probeHost(
           socket.destroy();
         }
       } catch {}
+      try {
+        onOutcome?.(outcome);
+      } catch {
+        // A broken tally subscriber must never break probing itself.
+      }
+      resolve(value);
     };
 
     timer = setTimeout(() => {
-      cleanup();
-      resolve(null);
+      finish('timeout', null);
     }, timeoutMs);
 
     try {
       const TcpSocket = require('react-native-tcp-socket');
-      socket = TcpSocket.createConnection({ host, port }, () => {
+      const nativeOptions: Record<string, unknown> = { host, port };
+      if (socketOptions.interface) nativeOptions.interface = socketOptions.interface;
+      if (socketOptions.localAddress) nativeOptions.localAddress = socketOptions.localAddress;
+      socket = TcpSocket.createConnection(nativeOptions, () => {
         try {
           const hello = encodeMessage({
             kind: 'hello',
@@ -50,8 +66,7 @@ export async function probeHost(
           });
           socket.write(hello);
         } catch {
-          cleanup();
-          resolve(null);
+          finish('refused', null);
         }
       });
 
@@ -62,27 +77,20 @@ export async function probeHost(
         if (newlineIdx !== -1) {
           const line = buffer.slice(0, newlineIdx);
           const msg = decodeLine(line);
-          cleanup();
-          if (msg) {
-            resolve(parseWelcomeResponse(host, port, msg));
-          } else {
-            resolve(null);
-          }
+          const found = msg ? parseWelcomeResponse(host, port, msg) : null;
+          finish(found ? 'found' : 'rejected', found);
         }
       });
 
       socket.on('error', () => {
-        cleanup();
-        resolve(null);
+        finish('refused', null);
       });
 
       socket.on('close', () => {
-        cleanup();
-        resolve(null);
+        finish('refused', null);
       });
     } catch {
-      cleanup();
-      resolve(null);
+      finish('refused', null);
     }
   });
 }
@@ -92,6 +100,9 @@ export interface ScanOptions {
   batchSize?: number;
   timeoutMs?: number;
   onHostFound?: (host: DiscoveredHost) => void;
+  onProbeOutcome?: (ip: string, outcome: ProbeOutcome) => void;
+  /** Overrides the Wi-Fi-pinned socket options built from the local IP (tests). */
+  socketOptions?: ConnectionSocketOptions;
 }
 
 /**
@@ -99,8 +110,10 @@ export interface ScanOptions {
  */
 export async function scanLocalSubnet(options?: ScanOptions): Promise<DiscoveredHost[]> {
   const port = options?.port ?? DEFAULT_PORT;
-  const batchSize = options?.batchSize ?? 35;
-  const timeoutMs = options?.timeoutMs ?? 450;
+  const batchSize = options?.batchSize ?? 50;
+  // 1000ms: sub-second probe timeouts are unreliable on recent phones
+  // (upstream react-native-tcp-socket#231) and on congested table Wi-Fi.
+  const timeoutMs = options?.timeoutMs ?? 1000;
 
   let localIp: string | null = null;
   try {
@@ -111,15 +124,28 @@ export async function scanLocalSubnet(options?: ScanOptions): Promise<Discovered
   }
 
   const ips = getSubnetIps(localIp);
-  log('scan', 'info', `scanning ${ips.length} addresses on port ${port}`, localIp ? `from ${localIp}` : undefined);
+  const socketOptions = options?.socketOptions
+    ?? buildConnectionSocketOptions({ platform: currentPlatform(), localIp });
+  const pinnedNote = socketOptions.interface ? ' (Wi-Fi pinned)' : '';
+  log('scan', 'info', `scanning ${ips.length} addresses on port ${port}${pinnedNote}`, localIp ? `from ${localIp}` : undefined);
   const chunks = chunkArray(ips, batchSize);
   const found: DiscoveredHost[] = [];
   const foundIps = new Set<string>();
+  let timeouts = 0;
+  let refused = 0;
 
   for (const chunk of chunks) {
     await Promise.all(
       chunk.map(async (ip) => {
-        const host = await probeHost(ip, port, timeoutMs);
+        const host = await probeHost(ip, port, timeoutMs, socketOptions, (outcome) => {
+          if (outcome === 'timeout') timeouts += 1;
+          else if (outcome === 'refused') refused += 1;
+          try {
+            options?.onProbeOutcome?.(ip, outcome);
+          } catch {
+            // A broken tally subscriber must never break the scan itself.
+          }
+        });
         if (host && !foundIps.has(host.ip)) {
           foundIps.add(host.ip);
           found.push(host);
@@ -131,7 +157,7 @@ export async function scanLocalSubnet(options?: ScanOptions): Promise<Discovered
     );
   }
 
-  log('scan', 'info', `scan finished: ${found.length} table${found.length === 1 ? '' : 's'} found`);
+  log('scan', 'info', `scan finished: ${found.length} table${found.length === 1 ? '' : 's'} found`, `${timeouts} timeouts, ${refused} refused`);
   setLastSeenHosts(found.map((h) => ({ ip: h.ip, port: h.port, hostName: h.hostName, playerCount: h.playerCount })));
   return found;
 }

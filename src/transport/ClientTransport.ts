@@ -4,6 +4,7 @@ import { Intent } from '../ledger/intents';
 import { Transport } from './Transport';
 import { ConnectionState, canSubmit, initialClientConnectionState, reduceClientConnection } from './clientConnection';
 import { DEFAULT_PORT, LineBuffer, PROTOCOL_VERSION, WireMessage, decodeLine, encodeMessage } from './wireProtocol';
+import { ConnectionSocketOptions } from './socketOptions';
 import { log } from '../diagnostics/logBuffer';
 
 export type { ConnectionState } from './clientConnection';
@@ -48,6 +49,11 @@ export class ClientTransport implements Transport {
   private port = DEFAULT_PORT;
   private clientId = '';
   private sinceSeq = 0;
+  private socketOptions: ConnectionSocketOptions = {};
+  /** First socket error seen while a dial is still awaiting `welcome` — surfaced
+   * to the caller instead of the generic 'Connection lost' so join failures are
+   * classifiable (issue #51). Reset on every dial. */
+  private dialError: string | null = null;
 
   get connectionState(): ConnectionState {
     return this.state.connectionState;
@@ -60,12 +66,15 @@ export class ClientTransport implements Transport {
 
   /** Resolves once `welcome` arrives (or rejects on timeout/error), carrying
    * the game id and initial event burst — the caller (connectionStore) seeds
-   * gameStore.createReplicaGame from it. */
-  connect(host: string, port: number = DEFAULT_PORT, clientId: string, sinceSeq = 0): Promise<{ gameId: string; events: GameEvent[] }> {
+   * gameStore.createReplicaGame from it. `socketOptions` pins the dial to a
+   * network interface (Android Wi-Fi, see socketOptions.ts); callers retry with
+   * `{}` when the pin itself is unavailable. */
+  connect(host: string, port: number = DEFAULT_PORT, clientId: string, sinceSeq = 0, socketOptions: ConnectionSocketOptions = {}): Promise<{ gameId: string; events: GameEvent[] }> {
     this.host = host;
     this.port = port;
     this.clientId = clientId;
     this.sinceSeq = sinceSeq;
+    this.socketOptions = socketOptions;
     this.transition({ type: 'connect' });
     return this.dial();
   }
@@ -110,7 +119,11 @@ export class ClientTransport implements Transport {
   private dial(): Promise<{ gameId: string; events: GameEvent[] }> {
     return new Promise((resolve, reject) => {
       log('connect', 'info', `dialing ${this.host}:${this.port}`);
-      const socket = TcpSocket.createConnection({ port: this.port, host: this.host }, () => {
+      this.dialError = null;
+      const nativeOptions: Record<string, unknown> = { port: this.port, host: this.host };
+      if (this.socketOptions.interface) nativeOptions.interface = this.socketOptions.interface;
+      if (this.socketOptions.localAddress) nativeOptions.localAddress = this.socketOptions.localAddress;
+      const socket = TcpSocket.createConnection(nativeOptions as { port: number; host: string }, () => {
         socket.write(encodeMessage({ kind: 'hello', protocolVersion: PROTOCOL_VERSION, clientId: this.clientId, sinceSeq: this.sinceSeq }));
       });
       this.socket = socket;
@@ -121,6 +134,7 @@ export class ClientTransport implements Transport {
       const onWelcome = (gameId: string, events: GameEvent[]) => {
         if (this.connectTimeoutTimer) clearTimeout(this.connectTimeoutTimer);
         this.connectTimeoutTimer = null;
+        this.dialError = null;
         resolve({ gameId, events });
       };
       this.pendingWelcome = onWelcome;
@@ -128,7 +142,10 @@ export class ClientTransport implements Transport {
 
       socket.on('data', (chunk: string | Buffer) => this.onData(chunk));
       socket.on('close', () => this.onLost('socket closed'));
-      socket.on('error', (err: unknown) => this.onLost(`socket error: ${messageOf(err)}`));
+      socket.on('error', (err: unknown) => {
+        if (this.dialError === null) this.dialError = messageOf(err);
+        this.onLost(`socket error: ${messageOf(err)}`);
+      });
     });
   }
 
@@ -200,8 +217,12 @@ export class ClientTransport implements Transport {
   private onLost(reason = 'unknown') {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
-    this.pendingWelcomeReject?.(new Error('Connection lost'));
+    // A dial still awaiting `welcome` rejects with the real socket error (if
+    // any) so callers can classify the failure; post-connect losses keep the
+    // generic message since the session, not the dial, failed.
+    this.pendingWelcomeReject?.(new Error(this.dialError ?? 'Connection lost'));
     this.pendingWelcomeReject = null;
+    this.dialError = null;
     for (const pending of this.pendingSubmits.values()) pending.reject(new Error('Connection lost'));
     this.pendingSubmits.clear();
     log('socket', 'warn', 'connection lost', reason);
