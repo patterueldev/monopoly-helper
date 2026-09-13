@@ -62,6 +62,11 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore, transp
   let hostTransport: HostTransport | null = null;
   let clientTransport: ClientTransport | null = null;
   let peerPollTimer: ReturnType<typeof setInterval> | null = null;
+  // Bumped whenever the session is left or a new host/join attempt starts, so a
+  // slow listen()/connect() that resolves after the user moved on closes itself
+  // instead of attaching a hidden server/session. The Host screen unmounts
+  // while its hostGame() is still awaiting listen() on a slow device.
+  let sessionEpoch = 0;
 
   const stopPeerPoll = () => { if (peerPollTimer) clearInterval(peerPollTimer); peerPollTimer = null; };
 
@@ -86,6 +91,7 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore, transp
       }
       stopPeerPoll();
 
+      const epoch = (sessionEpoch += 1);
       const transport = newHostTransport({
         gameId: game.gameId,
         dispatch: intent => store.getState().dispatch(intent),
@@ -96,8 +102,12 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore, transp
       } catch (err) {
         const message = err instanceof Error ? err.message : "Couldn't start hosting";
         log('session', 'error', 'failed to start hosting', message);
-        set({ status: 'error', lastError: message });
+        if (epoch === sessionEpoch) set({ status: 'error', lastError: message });
         return { ok: false, error: message };
+      }
+      if (epoch !== sessionEpoch) {
+        transport.close();
+        return { ok: false, error: 'Hosting cancelled' };
       }
       hostTransport = transport;
       saveLastHostGameId(game.storage, game.gameId);
@@ -109,9 +119,11 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore, transp
     },
 
     joinGame: async (host, port = DEFAULT_PORT) => {
+      const epoch = (sessionEpoch += 1);
       clearLastHostGameId(store.getState().storage);
       log('session', 'info', `joining ${host}:${port}`);
       const pinned = buildConnectionSocketOptions({ platform: currentPlatform(), localIp: await readLocalIp() });
+      if (epoch !== sessionEpoch) return { ok: false, error: 'Join cancelled' };
       const usePin = Object.keys(pinned).length > 0;
       // Pinned dials first; the final attempt is always unpinned so a bad pin
       // (or a non-Wi-Fi table link) can still connect.
@@ -120,16 +132,22 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore, transp
 
       let lastMessage = 'Could not connect';
       for (let i = 0; i < Math.min(attempts.length, MAX_JOIN_ATTEMPTS); i += 1) {
+        if (epoch !== sessionEpoch) return { ok: false, error: 'Join cancelled' };
         const transport = newClientTransport();
         const attemptOptions = attempts[i];
         const pinnedNote = Object.keys(attemptOptions).length > 0 ? 'wifi-pinned' : 'unpinned';
         if (i > 0) log('connect', 'info', `join attempt ${i + 1}/${MAX_JOIN_ATTEMPTS} (${pinnedNote})`, `${host}:${port}`);
         transport.onConnectionStateChange(state => {
+          if (epoch !== sessionEpoch) return;
           set({ status: state });
           if (state === 'disconnected') set({ lastError: 'Lost connection to host' });
         });
         try {
           const welcome = await transport.connect(host, port, uuid(), 0, attemptOptions);
+          if (epoch !== sessionEpoch) {
+            transport.close();
+            return { ok: false, error: 'Join cancelled' };
+          }
           const seeded = store.getState().createReplicaGame(welcome.gameId, welcome.events);
           if (!seeded.ok) { transport.close(); set({ status: 'error', lastError: seeded.error }); return seeded; }
           clientTransport = transport;
@@ -140,6 +158,7 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore, transp
           return { ok: true, value: undefined };
         } catch (error) {
           transport.close();
+          if (epoch !== sessionEpoch) return { ok: false, error: 'Join cancelled' };
           const raw = error instanceof Error ? error.message : 'Could not connect';
           const classified = classifyConnectError(raw, host, port);
           lastMessage = classified.message;
@@ -150,12 +169,14 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore, transp
           }
         }
       }
+      if (epoch !== sessionEpoch) return { ok: false, error: 'Join cancelled' };
       set({ status: 'error', lastError: lastMessage });
       return { ok: false, error: lastMessage };
     },
 
     leaveSession: () => {
       const wasHost = get().role === 'host';
+      sessionEpoch += 1;
       stopPeerPoll();
       store.getState().detachTransport();
       if (wasHost) clearLastHostGameId(store.getState().storage);

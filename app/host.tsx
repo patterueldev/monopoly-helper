@@ -1,6 +1,7 @@
 import { useKeepAwake } from 'expo-keep-awake';
-import { useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { colors } from '../src/theme';
 import { encodeJoinQr } from '../src/transport/joinQr';
@@ -16,6 +17,16 @@ export default function Host() {
     vm.updatePlayerColor(playerId, color);
     setEditingPlayerId(null);
   };
+
+  // The QR tree is hundreds of SVG nodes. Lobby events re-render this screen
+  // constantly, so keep the element reference stable and let React bail out.
+  const joinQr = useMemo(
+    () =>
+      vm.ip ? (
+        <QRCode value={encodeJoinQr({ host: vm.ip, port: vm.port })} size={200} backgroundColor={colors.white} color={colors.ink} />
+      ) : null,
+    [vm.ip, vm.port]
+  );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
@@ -54,7 +65,7 @@ export default function Host() {
             <Text style={{ color: colors.muted, fontWeight: '700', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Scan to join
             </Text>
-            <QRCode value={encodeJoinQr({ host: vm.ip, port: vm.port })} size={200} backgroundColor={colors.white} color={colors.ink} />
+            {joinQr}
             <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center' }}>
               Have players tap "Scan QR" on the Join screen instead of typing the address.
             </Text>

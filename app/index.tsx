@@ -1,9 +1,10 @@
-import { Link, router } from 'expo-router';
+import { Link, router, useFocusEffect } from 'expo-router';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
-import { useState } from 'react';
-import { Modal, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
-import { useGameStore } from '../src/store/gameStore';
+import { useCallback, useState } from 'react';
+import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useGameStore, ArchiveEntry } from '../src/store/gameStore';
 import { useConnectionStore } from '../src/store/connectionStore';
 import { useProfileStore } from '../src/store/profileStore';
 import { isGameStarted } from '../src/ledger/selectors';
@@ -13,13 +14,15 @@ import { DEFAULT_CONFIG, Account } from '../src/ledger/types';
 import { useAppUpdate } from '../src/viewmodels/useAppUpdate';
 import { UpdateBanner } from '../src/components/UpdateBanner';
 import { TestFlightNudge } from '../src/components/TestFlightNudge';
+import { VersionFooter } from '../src/components/VersionFooter';
 
 export default function Home() {
-  const games = useGameStore((x) => x.listGames)();
   const createGame = useGameStore((x) => x.createGame);
   const gameId = useGameStore((x) => x.gameId);
-  const gameState = useGameStore((x) => x.state);
+  const recordStarted = useGameStore((x) => x.state.started);
+  const recordEnded = useGameStore((x) => x.state.ended);
   const storage = useGameStore((x) => x.storage);
+  const listGames = useGameStore((x) => x.listGames);
   const hostGame = useConnectionStore((x) => x.hostGame);
   const profile = useProfileStore((s) => s.profile);
   const saveProfile = useProfileStore((s) => s.saveProfile);
@@ -28,7 +31,19 @@ export default function Home() {
   const [hostName, setHostName] = useState(profile?.name ?? '');
   const [hostColor, setHostColor] = useState(profile?.color ?? PLAYER_PALETTE[0]);
   const [hostError, setHostError] = useState<string | null>(null);
-  const canResumeHost = !!gameId && lastHostGameId(storage) === gameId && gameState.started && !gameState.ended;
+  const [games, setGames] = useState<ArchiveEntry[]>([]);
+
+  // Archive entries are only needed while this screen is visible. Computing
+  // them in the render body meant re-reading and re-folding every stored game
+  // on every ledger event (Home stays mounted under /host, /table, etc.) — the
+  // source of multi-second Android stalls while hosting and settling.
+  useFocusEffect(
+    useCallback(() => {
+      setGames(listGames());
+    }, [listGames])
+  );
+
+  const canResumeHost = !!gameId && lastHostGameId(storage) === gameId && recordStarted && !recordEnded;
 
   const update = useAppUpdate();
   const installedVersion = Application.nativeApplicationVersion ?? '?';
@@ -80,8 +95,12 @@ export default function Home() {
 
   const onResumeHost = async () => {
     const result = await hostGame();
-    if (result.ok) router.replace(isGameStarted(gameState) ? '/table' : '/host');
-    else setHostError(result.error);
+    if (result.ok) {
+      const state = useGameStore.getState().state;
+      router.replace(isGameStarted(state) ? '/table' : '/host');
+    } else {
+      setHostError(result.error);
+    }
   };
 
   return (
@@ -151,15 +170,12 @@ export default function Home() {
           </View>
         )}
 
-        {Platform.OS === 'android' ? (
-          <Pressable onPress={update.checkNow} style={{ marginTop: 18, alignItems: 'center' }}>
-            <Text style={{ color: colors.muted, fontSize: 13 }}>
-              v{installedVersion}
-              {update.phase === 'checking' ? ' · Checking for updates…' : ' · Tap to check for updates'}
-              {update.notice ? ` · ${update.notice}` : ''}
-            </Text>
-          </Pressable>
-        ) : null}
+        <VersionFooter
+          version={installedVersion}
+          onPress={Platform.OS === 'android' ? update.checkNow : undefined}
+          checking={update.phase === 'checking'}
+          notice={update.notice ?? undefined}
+        />
 
         {/* Host Setup Modal */}
         <Modal

@@ -1,4 +1,5 @@
-import { Alert, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '../src/store/gameStore';
 import { useProfileStore } from '../src/store/profileStore';
 import { incomingRequests, outgoingRequests } from '../src/ledger/selectors';
