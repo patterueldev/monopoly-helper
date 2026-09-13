@@ -14,6 +14,7 @@ export function useDiagnostics() {
   const role = useConnectionStore((s) => s.role);
   const status = useConnectionStore((s) => s.status);
   const lastError = useConnectionStore((s) => s.lastError);
+  const lastSocketSummary = useConnectionStore((s) => s.lastSocketSummary);
 
   const [logs, setLogs] = useState<LogEntry[]>(() => getLogs());
   useEffect(() => subscribeLogs(() => setLogs(getLogs())), []);
@@ -36,11 +37,17 @@ export function useDiagnostics() {
       // Same as above.
     }
     let localIp: string | null = null;
+    let networkType: string | null = null;
     try {
       const Network = require('expo-network');
       localIp = await Network.getIpAddressAsync();
+      try {
+        networkType = (await Network.getNetworkStateAsync())?.type ?? null;
+      } catch {
+        // Older expo-network without getNetworkStateAsync — leave unknown.
+      }
     } catch {
-      // Same as above.
+      // Native module unavailable (tests) — 'unknown' stands in.
     }
     return formatDiagnosticsReport({
       appVersion,
@@ -51,10 +58,12 @@ export function useDiagnostics() {
       status,
       lastError,
       localIp,
+      networkType,
+      socketSummary: lastSocketSummary,
       discoveredHosts: getLastSeenHosts(),
       logs: getLogs(),
     });
-  }, [role, status, lastError]);
+  }, [role, status, lastError, lastSocketSummary]);
 
   const shareReport = useCallback(async (): Promise<void> => {
     const message = await buildReport();
