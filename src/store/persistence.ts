@@ -1,9 +1,9 @@
 import { GameEvent, GameState, parseEvent } from '../ledger/types';
-import { fold } from '../ledger/reducer';
+import { applyEvent, initialState } from '../ledger/reducer';
 
 export interface KeyValueStorage { getString(key: string): string | undefined; set(key: string, value: string): void; getAllKeys(): string[]; }
 export interface PersistedGame { version: 1; events: GameEvent[]; lastSeq: number; }
-export interface RecoveryResult { events: GameEvent[]; recovered: number; corrupt: boolean; unrecoverable: boolean; }
+export interface RecoveryResult { events: GameEvent[]; state: GameState; recovered: number; corrupt: boolean; unrecoverable: boolean; }
 
 export class MemoryStorage implements KeyValueStorage {
   private values = new Map<string, string>();
@@ -29,13 +29,24 @@ export function saveGame(storage: KeyValueStorage, id: string, events: GameEvent
 }
 export function inspectGame(storage: KeyValueStorage, id: string): RecoveryResult {
   const raw = storage.getString(gameKey(id));
-  if (!raw || storage.getString(`${gameKey(id)}:version`) !== '1') return { events: [], recovered: 0, corrupt: false, unrecoverable: true };
+  if (!raw || storage.getString(`${gameKey(id)}:version`) !== '1') return { events: [], state: initialState(), recovered: 0, corrupt: false, unrecoverable: true };
   const scan = scanEvents(raw);
   const valid: GameEvent[] = [];
-  for (const event of scan.events) { const parsed = parseEvent(event); if (!parsed || parsed.seq !== valid.length || fold([...valid, parsed]).invalid) break; valid.push(parsed); }
-  const state = fold(valid);
+  // Single-pass validation: fold each accepted event into the running state
+  // instead of re-folding the whole prefix per event. The old O(n^2)-fold (with
+  // an O(n) state copy per fold) was the source of multi-second JS stalls on
+  // Android once archives grew — see recovery tests in persistence.test.ts.
+  let state = initialState();
+  for (const event of scan.events) {
+    const parsed = parseEvent(event);
+    if (!parsed || parsed.seq !== valid.length) break;
+    const next = applyEvent(state, parsed);
+    if (next.invalid) break;
+    state = next;
+    valid.push(parsed);
+  }
   const corrupt = scan.corrupt || valid.length !== scan.events.length;
-  return { events: valid, recovered: valid.length, corrupt, unrecoverable: !state.started };
+  return { events: valid, state, recovered: valid.length, corrupt, unrecoverable: !state.started };
 }
 export function loadGame(storage: KeyValueStorage, id: string): RecoveryResult { const result = inspectGame(storage, id); if (result.corrupt) { const raw = storage.getString(gameKey(id)); if (raw) storage.set(`${gameKey(id)}:corrupt:${Date.now()}`, raw); if (result.events.length > 0 && !result.unrecoverable) saveGame(storage, id, result.events); } return result; }
 export function saveDraft(storage: KeyValueStorage, id: string, draft: unknown) { storage.set(draftKey(id), JSON.stringify(draft)); }

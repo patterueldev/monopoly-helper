@@ -1,5 +1,6 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Linking, Pressable, Modal, SafeAreaView, Text, View } from 'react-native';
+import { Linking, Pressable, Modal, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { colors } from '../theme';
 

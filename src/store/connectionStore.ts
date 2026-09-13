@@ -33,6 +33,11 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
   let hostTransport: HostTransport | null = null;
   let clientTransport: ClientTransport | null = null;
   let peerPollTimer: ReturnType<typeof setInterval> | null = null;
+  // Bumped whenever the session is left or a new host/join attempt starts, so a
+  // slow listen()/connect() that resolves after the user moved on closes itself
+  // instead of attaching a hidden server/session. The Host screen unmounts
+  // while its hostGame() is still awaiting listen() on a slow device.
+  let sessionEpoch = 0;
 
   const stopPeerPoll = () => { if (peerPollTimer) clearInterval(peerPollTimer); peerPollTimer = null; };
 
@@ -56,6 +61,7 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
       }
       stopPeerPoll();
 
+      const epoch = (sessionEpoch += 1);
       const transport = new HostTransport({
         gameId: game.gameId,
         dispatch: intent => store.getState().dispatch(intent),
@@ -66,8 +72,12 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
       } catch (err) {
         const message = err instanceof Error ? err.message : "Couldn't start hosting";
         log('session', 'error', 'failed to start hosting', message);
-        set({ status: 'error', lastError: message });
+        if (epoch === sessionEpoch) set({ status: 'error', lastError: message });
         return { ok: false, error: message };
+      }
+      if (epoch !== sessionEpoch) {
+        transport.close();
+        return { ok: false, error: 'Hosting cancelled' };
       }
       hostTransport = transport;
       saveLastHostGameId(game.storage, game.gameId);
@@ -79,16 +89,22 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
     },
 
     joinGame: async (host, port = DEFAULT_PORT) => {
+      const epoch = (sessionEpoch += 1);
       const transport = new ClientTransport();
       clearLastHostGameId(store.getState().storage);
       log('session', 'info', `joining ${host}:${port}`);
       transport.onConnectionStateChange(state => {
+        if (epoch !== sessionEpoch) return;
         set({ status: state });
         if (state === 'disconnected') set({ lastError: 'Lost connection to host' });
       });
       set({ status: 'connecting', lastError: null });
       try {
         const welcome = await transport.connect(host, port, uuid(), 0);
+        if (epoch !== sessionEpoch) {
+          transport.close();
+          return { ok: false, error: 'Join cancelled' };
+        }
         const seeded = store.getState().createReplicaGame(welcome.gameId, welcome.events);
         if (!seeded.ok) { transport.close(); set({ status: 'error', lastError: seeded.error }); return seeded; }
         clientTransport = transport;
@@ -99,13 +115,14 @@ export const createConnectionStore = (store: GameStoreApi = useGameStore) => {
         transport.close();
         const message = error instanceof Error ? error.message : 'Could not connect';
         log('session', 'error', `join ${host}:${port} failed`, message);
-        set({ status: 'error', lastError: message });
+        if (epoch === sessionEpoch) set({ status: 'error', lastError: message });
         return { ok: false, error: message };
       }
     },
 
     leaveSession: () => {
       const wasHost = get().role === 'host';
+      sessionEpoch += 1;
       stopPeerPoll();
       store.getState().detachTransport();
       if (wasHost) clearLastHostGameId(store.getState().storage);

@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, PLAYER_PALETTE } from '../src/theme';
 import { DEFAULT_CONFIG, Account } from '../src/ledger/types';
 import { useGameStore } from '../src/store/gameStore';

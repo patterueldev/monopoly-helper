@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { clearLastHostGameId, lastHostGameId, MemoryStorage, loadGame, saveGame, scanEvents, saveDraft, loadDraft, saveLastHostGameId } from './persistence';
+import { clearLastHostGameId, lastHostGameId, MemoryStorage, inspectGame, loadGame, saveGame, scanEvents, saveDraft, loadDraft, saveLastHostGameId } from './persistence';
 import { makeEvent } from '../ledger/intents';
-import { Account, DEFAULT_CONFIG } from '../ledger/types';
+import { fold } from '../ledger/reducer';
+import { Account, DEFAULT_CONFIG, GameEvent } from '../ledger/types';
 
 const bank: Account = { id: 'bank', kind: 'bank', name: 'Bank', color: 'green', unlimited: true, assets: [] };
 const player = (id: string, color: string): Account => ({ id, kind: 'player', name: id, color, unlimited: false, assets: [] });
@@ -25,5 +26,43 @@ describe('persistence adapter and recovery', () => {
     expect(lastHostGameId(storage)).toBe('g1');
     clearLastHostGameId(storage);
     expect(lastHostGameId(storage)).toBe('');
+  });
+  it('folds a valid log in one pass and returns the same state as fold()', () => {
+    const storage = new MemoryStorage();
+    const events = [
+      start,
+      makeEvent('transfer', { from: 'a', to: 'b', amount: 10, reason: { kind: 'rent' } }, 'a', 1, 't1'),
+      makeEvent('turn.advanced', { toAccountId: 'b' }, 'a', 2, 'turn1'),
+    ];
+    saveGame(storage, 'g2', events);
+    const result = inspectGame(storage, 'g2');
+    expect(result.recovered).toBe(3);
+    expect(result.corrupt).toBe(false);
+    expect(result.unrecoverable).toBe(false);
+    expect(result.state).toEqual(fold(events));
+  });
+  it('stops at the first invalid event and keeps the folded prefix state', () => {
+    const storage = new MemoryStorage();
+    const valid = makeEvent('transfer', { from: 'a', to: 'b', amount: 25, reason: { kind: 'rent' } }, 'a', 1, 't1');
+    const seqGap = makeEvent('transfer', { from: 'a', to: 'b', amount: 5, reason: { kind: 'rent' } }, 'a', 3, 't2');
+    saveGame(storage, 'g3', [start, valid, seqGap]);
+    const result = inspectGame(storage, 'g3');
+    expect(result.recovered).toBe(2);
+    expect(result.corrupt).toBe(true);
+    expect(result.events).toHaveLength(2);
+    expect(result.state.balances.b).toBe(DEFAULT_CONFIG.startingCash + 25);
+  });
+  it('recovers a long log without re-folding the full prefix per event', () => {
+    const storage = new MemoryStorage();
+    const events: GameEvent[] = [start];
+    for (let seq = 1; seq <= 400; seq += 1) {
+      events.push(makeEvent('turn.advanced', { toAccountId: seq % 2 === 0 ? 'a' : 'b' }, 'a', seq, `turn-${seq}`));
+    }
+    saveGame(storage, 'g4', events);
+    const result = inspectGame(storage, 'g4');
+    expect(result.recovered).toBe(events.length);
+    expect(result.corrupt).toBe(false);
+    expect(result.state.currentTurnAccountId).toBe('a');
+    expect(result.state).toEqual(fold(events));
   });
 });
